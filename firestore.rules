@@ -1,0 +1,40 @@
+rules_version = '2';
+
+// Ledgerline security rules.
+// Each person's data lives under /users/{their uid}/ and only that signed-in person can read or write it.
+// Everything else is denied.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+      // To limit the app to specific people (you and family), use this line instead and list their emails:
+      // return request.auth != null && request.auth.uid == uid
+      //   && request.auth.token.email_verified == true
+      //   && request.auth.token.email in ['you@gmail.com', 'family@gmail.com'];
+    }
+
+    // settings, plan (budgets, goals, recurring, debts, assumptions) and cached market rates
+    match /users/{uid}/ledger/{docId} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && docId in ['settings', 'plan', 'market']
+        && request.resource.data.keys().size() < 30;
+    }
+
+    // one document per month: { month: 'YYYY-MM', items: [ ...transactions ] }
+    match /users/{uid}/months/{month} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && month.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')
+        && request.resource.data.keys().hasOnly(['month', 'items'])
+        && request.resource.data.month == month
+        && request.resource.data.items is list
+        && request.resource.data.items.size() <= 3000;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
