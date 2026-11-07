@@ -25,7 +25,7 @@ With no Firebase config the app runs in **demo mode**: "Try the demo" signs you 
    firebase use --add                # pick your project (creates .firebaserc)
    npm run deploy                    # builds, then deploys hosting + Firestore rules
    ```
-   Your app is live at `https://<project-id>.web.app`. Open it on your phone and use *Add to Home Screen* to install it.
+   Your app is live at `https://personal-ledger.web.app`. Open it on your phone and use *Add to Home Screen* to install it.
 
 ### Optional: only allow specific people
 
