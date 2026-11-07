@@ -5,12 +5,12 @@
  * While projectId is empty the app runs in demo mode: no sign-in, data kept in memory only.
  */
 export const firebaseConfig = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: '',
+  apiKey: 'AIzaSyD-4ikmIQiZdFmwlVGcY6UkxXo4Z9La6JQ',
+  authDomain: 'ledgerline-4e2d3.firebaseapp.com',
+  projectId: 'ledgerline-4e2d3',
+  storageBucket: 'ledgerline-4e2d3.firebasestorage.app',
+  messagingSenderId: '887885056752',
+  appId: '1:887885056752:web:857a6da0565af806415035',
 };
 
 /** Set to true to point the app at the local Firebase emulators (npm run emulators). */
