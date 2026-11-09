@@ -5,10 +5,10 @@ import {
   onAuthStateChanged, setPersistence, signInWithPopup, signInWithRedirect, signOut,
 } from 'firebase/auth';
 import {
-  Firestore, clearIndexedDbPersistence, collection, getDoc, connectFirestoreEmulator, deleteDoc, doc, initializeFirestore, onSnapshot,
+  Firestore, clearIndexedDbPersistence, collection, getDoc, getDocFromServer, connectFirestoreEmulator, deleteDoc, doc, initializeFirestore, onSnapshot,
   persistentLocalCache, persistentMultipleTabManager, setDoc, terminate,
 } from 'firebase/firestore';
-import { ReCaptchaEnterpriseProvider, initializeAppCheck } from 'firebase/app-check';
+import { AppCheck, ReCaptchaEnterpriseProvider, getToken, initializeAppCheck } from 'firebase/app-check';
 import { aiConfig, firebaseConfig, useEmulators } from '../../environments/firebase.config';
 import { MarketRates, Plan, Settings, Transaction } from '../core/models';
 import { AppUser, Backend, DocRef, LedgerSnapshot, SubscribeHandlers } from './backend';
@@ -20,12 +20,13 @@ export class FirebaseBackend extends Backend {
   readonly app: FirebaseApp;
   private readonly auth: Auth;
   private readonly db: Firestore;
+  private appCheck: AppCheck | null = null;
 
   constructor() {
     super();
     this.app = initializeApp(firebaseConfig);
     if (aiConfig.appCheckSiteKey) {
-      initializeAppCheck(this.app, { provider: new ReCaptchaEnterpriseProvider(aiConfig.appCheckSiteKey), isTokenAutoRefreshEnabled: true });
+      this.appCheck = initializeAppCheck(this.app, { provider: new ReCaptchaEnterpriseProvider(aiConfig.appCheckSiteKey), isTokenAutoRefreshEnabled: true });
     }
     this.auth = getAuth(this.app);
     // Offline cache: the app opens instantly and works without a connection; writes sync when back online.
@@ -39,6 +40,34 @@ export class FirebaseBackend extends Backend {
     onAuthStateChanged(this.auth, (u) =>
       this.user.set(u ? { uid: u.uid, name: u.displayName ?? '', email: u.email ?? '', photoURL: u.photoURL } : null),
     );
+  }
+
+  /** Connection check shown in Setup: App Check token and a direct server read, each with the exact error. */
+  async diagnose(): Promise<{ name: string; ok: boolean; detail: string }[]> {
+    const out: { name: string; ok: boolean; detail: string }[] = [];
+    const t0 = performance.now();
+    if (!this.appCheck) out.push({ name: 'App Check', ok: false, detail: 'Not configured (no site key in firebase.config.ts).' });
+    else {
+      try {
+        const r = await within(getToken(this.appCheck, true), 20000, 'No token after 20 s (reCAPTCHA did not answer).');
+        out.push({ name: 'App Check', ok: true, detail: `Token received in ${Math.round(performance.now() - t0)} ms.` });
+        void r;
+      } catch (e) {
+        out.push({ name: 'App Check', ok: false, detail: describe(e) });
+      }
+    }
+    const uid = this.user()?.uid;
+    if (!uid) out.push({ name: 'Database', ok: false, detail: 'Not signed in.' });
+    else {
+      const t1 = performance.now();
+      try {
+        const snap = await within(getDocFromServer(doc(this.db, 'users', uid, 'ledger', 'settings')), 20000, 'No answer from Firestore after 20 s.');
+        out.push({ name: 'Database', ok: true, detail: `Server answered in ${Math.round(performance.now() - t1)} ms (${snap.exists() ? 'settings found' : 'no settings yet'}). Signed in as ${this.user()?.email}.` });
+      } catch (e) {
+        out.push({ name: 'Database', ok: false, detail: describe(e) + ` Signed in as ${this.user()?.email}.` });
+      }
+    }
+    return out;
   }
 
   async signIn(): Promise<void> {
@@ -123,6 +152,18 @@ export class FirebaseBackend extends Backend {
     const coll = ref.kind === 'ledger' ? 'ledger' : ref.kind === 'month' ? 'months' : 'receipts';
     return doc(this.db, 'users', uid, coll, ref.id);
   }
+}
+
+function within<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(message)), ms);
+    p.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+  });
+}
+
+export function describe(e: unknown): string {
+  const err = e as { code?: string; message?: string; customData?: { httpStatus?: number } };
+  return [err?.code, err?.message].filter(Boolean).join(': ').slice(0, 300) || String(e);
 }
 
 /** Firestore rejects `undefined` field values. */

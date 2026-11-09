@@ -65,6 +65,24 @@ export class GeminiReader extends ReceiptReader {
     return this.models;
   }
 
+  /** Tiny request used by the connection check in Setup. */
+  async ping(): Promise<{ ok: boolean; detail: string }> {
+    const ai = getAI(this.backend.app, { backend: new GoogleAIBackend() });
+    const errors: string[] = [];
+    for (const model of aiConfig.models) {
+      const t0 = performance.now();
+      try {
+        const res = await withTimeout(getGenerativeModel(ai, { model }, { timeout: 30_000 }).generateContent('Reply with the single word OK.'), 35_000);
+        return { ok: true, detail: `${model} answered "${res.response.text().trim().slice(0, 20)}" in ${Math.round(performance.now() - t0)} ms.` };
+      } catch (e) {
+        const d = details(e);
+        errors.push(`${model}: ${e instanceof ReadError ? e.message : serverReason(d)}`);
+        if (!isModelUnavailable(e)) break;
+      }
+    }
+    return { ok: false, detail: errors.join(' | ').slice(0, 600) };
+  }
+
   async read(req: ReadRequest): Promise<RawExtraction> {
     const models = this.getModels();
     let lastError: unknown = null;

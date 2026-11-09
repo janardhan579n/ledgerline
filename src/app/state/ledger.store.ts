@@ -216,7 +216,10 @@ export const LedgerStore = signalStore(
                 setTimeout(() => store.autoPostRecurring(), 300);
               }
             },
-            error: (message) => patchState(store, { status: store.settings() ? 'ready' : 'error', note: message }),
+            error: (message) => {
+              clearTimeout(slowTimer); // keep the real error visible instead of the generic "can't reach" note
+              patchState(store, { status: store.settings() ? 'ready' : 'error', note: message });
+            },
           });
         });
       });

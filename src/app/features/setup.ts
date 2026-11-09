@@ -1,4 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { FirebaseBackend } from '../data/firebase-backend';
+import { GeminiReader } from '../data/gemini-reader';
 import { CURRENCIES, currencyName } from '../core/currency';
 import { accountTypeLabel } from '../core/defaults';
 import { CategoryKind } from '../core/models';
@@ -92,6 +94,18 @@ import { LedgerStore } from '../state/ledger.store';
         <p class="recaptcha-note">This site is protected by reCAPTCHA and the Google <a href="https://policies.google.com/privacy">Privacy Policy</a> and <a href="https://policies.google.com/terms">Terms of Service</a> apply.</p>
         <label class="check"><input type="checkbox" [checked]="settings().scan?.keepCopies ?? true" (change)="setKeep($any($event.target).checked)"><span>Keep a small copy of each scanned file with its transaction</span></label>
       </section>
+      @if (backend.mode === 'firebase') {
+        <section class="card span-2">
+          <div class="card-h"><h3>Connection check</h3><button class="btn sm" (click)="runCheck()" [disabled]="checking()">{{ checking() ? 'Checking… (up to a minute)' : 'Run check' }}</button></div>
+          <p class="small muted">Tests App Check, the database and the AI service from this device, and shows the exact error if one fails. Send a screenshot of the results if something isn't working.</p>
+          @if (checks().length) {
+            <ul class="acc-list">@for (c of checks(); track c.name) {
+              <li><span><b>{{ c.name }}</b><br><small class="muted">{{ c.detail }}</small></span>
+                @if (c.ok) {<span class="pill good"><app-icon name="check" />OK</span>} @else {<span class="pill critical"><app-icon name="alert" />Failed</span>}</li>
+            }</ul>
+          }
+        </section>
+      }
       <section class="card">
         <div class="card-h"><h3>Account & privacy</h3></div>
         @if (backend.mode === 'demo') {
@@ -161,6 +175,20 @@ export default class Setup {
     if (this.settings().accounts.some((a) => a.currency === code) || this.store.transactions().some((t) => t.currency === code))
       return this.toast.show(`${code} is used by an account or transaction, so it stays.`);
     this.store.saveSettings((s) => { s.currencies = s.currencies.filter((x) => x !== code); delete s.manualRates[code]; });
+  }
+  protected readonly checks = signal<{ name: string; ok: boolean; detail: string }[]>([]);
+  protected readonly checking = signal(false);
+  protected async runCheck() {
+    this.checking.set(true);
+    this.checks.set([]);
+    try {
+      const results = await (this.backend as FirebaseBackend).diagnose();
+      this.checks.set(results);
+      const ai = this.reader instanceof GeminiReader ? await this.reader.ping() : { ok: false, detail: 'Demo reader in use.' };
+      this.checks.set([...results, { name: 'AI service', ...ai }]);
+    } finally {
+      this.checking.set(false);
+    }
   }
   protected setKeep(on: boolean) {
     this.store.saveSettings((s) => (s.scan = { ...(s.scan ?? { keepCopies: true }), keepCopies: on }));
