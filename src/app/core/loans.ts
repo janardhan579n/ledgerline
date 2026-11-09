@@ -202,15 +202,19 @@ export function flatSettlement(s: LoanStatus, tenure: number): { amount: number;
 }
 
 /**
- * When the outstanding amount and the original loan + tenure are both given, they should imply about
- * the same rate. Returns both rates when they clearly disagree.
+ * The original loan + tenure imply a rate. When the person also gave a rate or an outstanding amount,
+ * the two should roughly agree; returns both when they clearly don't (usually a mistyped amount, or an
+ * "amount borrowed" that already includes interest).
  */
-export function rateConflict(i: LoanInput): { fromOutstanding: number; fromOriginal: number } | null {
-  if (!(i.outstanding! > 0) || !(i.original! > 0) || !(i.tenure! > 0) || i.monthsLeft > i.tenure!) return null;
-  const a = solveRate(i.outstanding!, i.emi, i.monthsLeft);
-  const b = solveRate(i.original!, i.emi, i.tenure!);
-  if (a == null || b == null) return null;
-  return Math.abs(a - b) > Math.max(1, 0.15 * Math.min(a, b)) ? { fromOutstanding: a, fromOriginal: b } : null;
+export function rateConflict(i: LoanInput): { given: number; fromOriginal: number; source: 'rate' | 'outstanding' } | null {
+  if (i.flat || !(i.original! > 0) || !(i.tenure! > 0) || i.monthsLeft > i.tenure!) return null;
+  let given: number | null = null;
+  if (i.basis === 'rate' && i.apr != null && i.apr >= 0) given = i.apr;
+  else if (i.basis === 'outstanding' && i.outstanding! > 0) given = solveRate(i.outstanding!, i.emi, i.monthsLeft);
+  if (given == null) return null;
+  const fromOriginal = solveRate(i.original!, i.emi, i.tenure!);
+  if (fromOriginal == null) return { given, fromOriginal: Number.NaN, source: i.basis as 'rate' | 'outstanding' };
+  return Math.abs(given - fromOriginal) > Math.max(1, 0.15 * Math.min(given, fromOriginal)) ? { given, fromOriginal, source: i.basis as 'rate' | 'outstanding' } : null;
 }
 
 /** What a debt counts as today, in its own currency: principal for loans when known, otherwise what's left to pay. */

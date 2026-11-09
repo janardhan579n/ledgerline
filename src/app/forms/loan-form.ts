@@ -66,9 +66,9 @@ const BASES: ReadonlyArray<[LoanBasis, string]> = [['rate', 'Interest rate'], ['
             }
           }
           <details class="adv" [open]="needsOriginal() || hasLife()">
-            <summary>{{ needsOriginal() ? 'Original loan' : 'Original loan (optional, for progress and interest paid so far)' }}</summary>
+            <summary>{{ needsOriginal() ? 'Original loan' : 'Original loan (optional, for progress and interest paid so far; leave blank if unsure)' }}</summary>
             <div class="field-row">
-              <div class="field"><label for="lf-orig">Loan amount taken</label><input id="lf-orig" formControlName="original" type="number" step="any" min="0" inputmode="decimal"></div>
+              <div class="field"><label for="lf-orig">Loan amount taken <span class="muted">(principal only, before interest)</span></label><input id="lf-orig" formControlName="original" type="number" step="any" min="0" inputmode="decimal"></div>
               <div class="field"><label for="lf-ten">Total EMIs (tenure)</label><div class="input-unit"><input id="lf-ten" formControlName="tenure" type="number" min="1" max="600" inputmode="numeric"><span>months</span></div></div>
             </div>
           </details>
@@ -160,8 +160,11 @@ export class LoanForm implements OnInit {
     } else {
       out = apr == null ? null : presentValue(i.emi, i.monthsLeft, apr);
       rate = apr == null ? null : `${+apr.toFixed(2)}% a year${i.basis === 'rate' ? '' : ' (worked out)'}`;
-      const c = i.basis === 'outstanding' ? rateConflict(i) : null;
-      if (c) warnings.push(`These numbers don't agree: the outstanding amount means ${+c.fromOutstanding.toFixed(1)}% a year, but the original loan and tenure mean ${+c.fromOriginal.toFixed(1)}%. One of them is probably off. Check the outstanding principal (not the total of the EMIs left) and the number of EMIs left on your statement.`);
+      const c = rateConflict(i);
+      if (c) warnings.push(
+        `These numbers don't agree: ${c.source === 'rate' ? `you entered ${+c.given.toFixed(2)}% a year` : `the outstanding amount means ${+c.given.toFixed(1)}% a year`}, ` +
+        (Number.isNaN(c.fromOriginal) ? `but the original loan and tenure don't fit the EMI at all. ` : `but the original loan and tenure mean ${+c.fromOriginal.toFixed(1)}%. `) +
+        `"Loan amount taken" must be the principal only, not principal + interest, and the tenure must match. If you don't know them, leave both blank; the rest still works.`);
       else if (apr != null && apr > SUSPICIOUS_APR) warnings.push(`${+apr.toFixed(1)}% a year is unusually high for a loan, so a number is probably off. If your bank quotes a flat rate, choose Flat rate. A 0% instalment plan should use an interest rate of 0.`);
     }
     return {

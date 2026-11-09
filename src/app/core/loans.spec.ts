@@ -174,9 +174,20 @@ describe('numbers that do not fit', () => {
   it('flags an outstanding amount that disagrees with the original loan and tenure', () => {
     // RM 26,652.13 over 12 EMIs of RM 2,935.45, 8 left, outstanding typed as RM 16,831.16
     const c = rateConflict({ emi: 2935.45, monthsLeft: 8, basis: 'outstanding', outstanding: 16_831.16, original: 26_652.13, tenure: 12 })!;
-    expect(c.fromOutstanding).toBeGreaterThan(90);
+    expect(c.given).toBeGreaterThan(90);
+    expect(c.source).toBe('outstanding');
     expect(c.fromOriginal).toBeCloseTo(54.9, 0);
     expect(rateConflict({ emi: 17_994.52, monthsLeft: 180, basis: 'outstanding', outstanding: presentValue(17_994.52, 180, 9), original: 2_000_000, tenure: 240 })).toBeNull();
+  });
+  it('flags a known rate that disagrees with an amount borrowed that includes interest', () => {
+    // FlexiPay at 7.88%: RM 26,652.13 is principal + interest, so it can't be the amount borrowed
+    const c = rateConflict({ emi: 2935.45, monthsLeft: 8, basis: 'rate', apr: 7.88, original: 26_652.13, tenure: 12 })!;
+    expect(c).toMatchObject({ given: 7.88, source: 'rate' });
+    expect(rateConflict({ emi: 2935.45, monthsLeft: 8, basis: 'rate', apr: 7.88 })).toBeNull();
+    const s = loanStatus(loan({ amount: 2935.45, monthsLeft: 8, basis: 'rate' }, 7.88), '2026-11-09')!;
+    expect(s.payable).toBe(23_483.6);
+    expect(s.outstanding).toBeCloseTo(22_804.58, 1);
+    expect(s.interestLeft).toBeCloseTo(679.02, 1);
   });
   it('marks very high rates as suspicious', () => {
     expect(loanStatus(loan({}, 96.7), '2026-11-09')!.suspicious).toBe(true);
