@@ -59,7 +59,7 @@ interface Group { date: string | null; label: string; items: Transaction[] }
           <li>
             <button class="tx" type="button" (click)="edit.emit(t)">
               <span class="tx-ico" [class]="'tx-ico t-' + t.type"><app-icon [name]="t.type" /></span>
-              <span class="tx-main"><b>{{ title(t) }}</b><small>{{ sub(t) || '&nbsp;' }}</small></span>
+              <span class="tx-main"><b>{{ title(t) }}@if (t.receiptId) {<app-icon name="clip" class="clip" />}</b><small>{{ sub(t) || '&nbsp;' }}</small></span>
               <span class="tx-amt">
                 <b [class.pos]="sign(t) > 0" [class.neg]="sign(t) < 0">{{ sign(t) > 0 ? '+' : sign(t) < 0 ? '−' : '' }}{{ t.amount | money: t.currency }}</b>
                 @if (t.currency !== fin().primary) {

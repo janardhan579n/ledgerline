@@ -30,6 +30,8 @@ export interface Transaction {
   fx?: LockedRate;
   recurringId?: string;
   importId?: string;
+  /** Stored copy of the scanned receipt or payslip this came from. */
+  receiptId?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -58,6 +60,8 @@ export interface Settings {
   manualRates: Record<string, LockedRate>;
   accounts: Account[];
   categories: Category[];
+  /** Receipt scanning preferences. */
+  scan?: { keepCopies: boolean; accountId?: string };
   createdAt: string;
   updatedAt?: string;
 }

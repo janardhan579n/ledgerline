@@ -44,6 +44,24 @@ describe('a user\'s own data', () => {
   });
 });
 
+describe('receipt copies', () => {
+  const receipt = { id: 'r1', name: 'tesco.jpg', mime: 'image/jpeg', data: 'aGVsbG8=', size: 5, createdAt: '2026-11-09T00:00:00Z' };
+  it('can be stored and read by the owner only', async () => {
+    const alice = env.authenticatedContext('alice').firestore();
+    await assertSucceeds(setDoc(doc(alice, 'users/alice/receipts/r1'), receipt));
+    await assertSucceeds(getDoc(doc(alice, 'users/alice/receipts/r1')));
+    const bob = env.authenticatedContext('bob').firestore();
+    await assertFails(getDoc(doc(bob, 'users/alice/receipts/r1')));
+  });
+  it('rejects oversized or unexpected receipt documents', async () => {
+    const alice = env.authenticatedContext('alice').firestore();
+    await assertFails(setDoc(doc(alice, 'users/alice/receipts/r1'), { ...receipt, data: 'x'.repeat(700001) }));
+    await assertFails(setDoc(doc(alice, 'users/alice/receipts/r1'), { ...receipt, mime: 'text/html' }));
+    await assertFails(setDoc(doc(alice, 'users/alice/receipts/r2'), receipt));
+    await assertFails(setDoc(doc(alice, 'users/alice/receipts/r1'), { ...receipt, extra: 1 }));
+  });
+});
+
 describe('document shape', () => {
   it('rejects unknown ledger documents and malformed months', async () => {
     const db = env.authenticatedContext('alice').firestore();

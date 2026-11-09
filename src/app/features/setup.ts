@@ -4,6 +4,7 @@ import { accountTypeLabel } from '../core/defaults';
 import { CategoryKind } from '../core/models';
 import { Backend } from '../data/backend';
 import { RatesService } from '../data/rates.service';
+import { ReceiptReader } from '../data/receipt-reader';
 import { Actions } from '../shared/actions.service';
 import { confirmAction } from '../shared/confirm-dialog';
 import { DialogService } from '../shared/dialog.service';
@@ -85,6 +86,12 @@ import { LedgerStore } from '../state/ledger.store';
         </div>
       </section>
       <section class="card">
+        <div class="card-h"><h3>Receipt scanning</h3><button class="btn sm primary" (click)="actions.scan()"><app-icon name="scan" />Scan now</button></div>
+        <p class="small">Reads photos and PDFs of receipts, bills, invoices, payslips and statements, and suggests transactions for you to check before saving. Reader: <b>{{ reader.label }}</b>.</p>
+        <p class="small muted">{{ reader.privacyNote }}</p>
+        <label class="check"><input type="checkbox" [checked]="settings().scan?.keepCopies ?? true" (change)="setKeep($any($event.target).checked)"><span>Keep a small copy of each scanned file with its transaction</span></label>
+      </section>
+      <section class="card">
         <div class="card-h"><h3>Account & privacy</h3></div>
         @if (backend.mode === 'demo') {
           <p class="small">Demo mode: nothing is saved. Add your Firebase project details to <code>src/environments/firebase.config.ts</code> and deploy to keep your data (see README).</p>
@@ -104,6 +111,7 @@ export default class Setup {
   protected readonly exp = inject(ExportService);
   protected readonly rates = inject(RatesService);
   protected readonly backend = inject(Backend);
+  protected readonly reader = inject(ReceiptReader);
   private readonly dialog = inject(DialogService);
   private readonly toast = inject(ToastService);
   protected readonly P = this.store.primary;
@@ -152,6 +160,9 @@ export default class Setup {
     if (this.settings().accounts.some((a) => a.currency === code) || this.store.transactions().some((t) => t.currency === code))
       return this.toast.show(`${code} is used by an account or transaction, so it stays.`);
     this.store.saveSettings((s) => { s.currencies = s.currencies.filter((x) => x !== code); delete s.manualRates[code]; });
+  }
+  protected setKeep(on: boolean) {
+    this.store.saveSettings((s) => (s.scan = { ...(s.scan ?? { keepCopies: true }), keepCopies: on }));
   }
   protected async deleteAll() {
     const ok = await confirmAction(this.dialog, "Delete every transaction, account, budget, goal and setting you've stored? This can't be undone. Download a backup first if you might need it.", 'Delete everything');

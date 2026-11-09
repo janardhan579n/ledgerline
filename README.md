@@ -33,6 +33,18 @@ By default anyone with a Google account can sign in. Each person still only ever
 
 Turning on two-step verification for your Google account protects the app too, since that's your login.
 
+## Scanning receipts and payslips
+
+Tap **Scan** (or **Scan a receipt or payslip** in the Add form), choose photos or PDFs, check the suggested transactions, and save. It handles receipts, bills, invoices (yours or ones you paid), payslips (recorded as net pay, with gross and deductions in the notes) and bank statements (one transaction per line). Likely duplicates of existing transactions are flagged and left unticked.
+
+**Turn it on once (free):** Firebase console → **AI Services → AI Logic → Get started → Gemini Developer API**. That's all; no billing account is needed.
+
+- **Cost:** the Gemini Developer API free tier is used, at roughly 10 requests a minute and a daily cap. Files are read one at a time.
+- **Privacy:** on the free tier Google may use what you send to improve its products, and human reviewers may read it. If you'd rather avoid that, link a billing account (Blaze plan); then your files aren't used for training, at a cost of a few cents a month for personal use.
+- **Models:** set in `src/environments/firebase.config.ts` (`aiConfig.models`), tried in order. Update the list if Google retires a model.
+- **Receipt copies:** if "Keep a small copy" is ticked, photos are shrunk to about 300 KB and stored in `users/{uid}/receipts/`, readable only by you. Open one from the transaction with **View receipt**.
+- **Protect your AI quota (optional):** anyone who copies your web config could use your free AI requests. To stop that, create a reCAPTCHA v3 key for `personal-ledger.web.app`, register it under Firebase **App Check**, put the site key in `aiConfig.appCheckSiteKey`, deploy, then turn on **Enforce** for AI Logic in App Check.
+
 ## How data is protected
 
 | Layer | What it does |

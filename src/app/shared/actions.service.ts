@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Account, Budget, Category, Debt, Goal, Recurring, Transaction } from '../core/models';
 import { ImportCsv } from '../forms/import-csv';
+import { ScanDialog } from '../forms/scan-dialog';
 import { AccountForm, BudgetForm, CategoryForm, DebtForm, GoalForm, RecurringForm } from '../forms/simple-forms';
 import { TxForm } from '../forms/tx-form';
 import { LedgerStore } from '../state/ledger.store';
@@ -28,6 +29,13 @@ export class Actions {
   goal(goal: Goal | null = null, emergency = false, suggestedTarget: number | null = null) { return this.dialog.open(GoalForm, { goal, emergency, suggestedTarget }); }
   recurring(item: Recurring | null = null) { return this.dialog.open(RecurringForm, { item }); }
   debt(debt: Debt | null = null) { return this.dialog.open(DebtForm, { debt }); }
+  scan() {
+    if (!this.store.settingsView().accounts.length) {
+      this.toast.show('Add an account first.');
+      return this.dialog.open(AccountForm);
+    }
+    return this.dialog.open(ScanDialog);
+  }
   importCsv() {
     if (!this.store.settingsView().accounts.length) return this.account();
     return this.dialog.open(ImportCsv);

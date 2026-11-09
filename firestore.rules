@@ -33,6 +33,17 @@ service cloud.firestore {
         && request.resource.data.items.size() <= 3000;
     }
 
+    // small copies of scanned receipts and payslips (base64 image or PDF, under ~700 KB)
+    match /users/{uid}/receipts/{receiptId} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['id', 'name', 'mime', 'data', 'size', 'createdAt'])
+        && request.resource.data.id == receiptId
+        && request.resource.data.mime in ['image/jpeg', 'application/pdf']
+        && request.resource.data.data is string
+        && request.resource.data.data.size() < 700000;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

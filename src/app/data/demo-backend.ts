@@ -42,8 +42,13 @@ export class DemoBackend extends Backend {
     this.notify();
   }
 
+  async get<T>(uid: string, ref: DocRef): Promise<T | null> {
+    const d = this.docs.get(this.key(uid, ref));
+    return d ? (structuredClone(d) as T) : null;
+  }
+
   private key(uid: string, ref: DocRef) {
-    return `${uid}/${ref.kind === 'ledger' ? 'ledger' : 'months'}/${ref.id}`;
+    return `${uid}/${ref.kind === 'ledger' ? 'ledger' : ref.kind === 'month' ? 'months' : 'receipts'}/${ref.id}`;
   }
 
   private notify() {

@@ -5,10 +5,11 @@ import {
   onAuthStateChanged, setPersistence, signInWithPopup, signInWithRedirect, signOut,
 } from 'firebase/auth';
 import {
-  Firestore, clearIndexedDbPersistence, collection, connectFirestoreEmulator, deleteDoc, doc, initializeFirestore, onSnapshot,
+  Firestore, clearIndexedDbPersistence, collection, getDoc, connectFirestoreEmulator, deleteDoc, doc, initializeFirestore, onSnapshot,
   persistentLocalCache, persistentMultipleTabManager, setDoc, terminate,
 } from 'firebase/firestore';
-import { firebaseConfig, useEmulators } from '../../environments/firebase.config';
+import { ReCaptchaV3Provider, initializeAppCheck } from 'firebase/app-check';
+import { aiConfig, firebaseConfig, useEmulators } from '../../environments/firebase.config';
 import { MarketRates, Plan, Settings, Transaction } from '../core/models';
 import { AppUser, Backend, DocRef, LedgerSnapshot, SubscribeHandlers } from './backend';
 
@@ -16,13 +17,16 @@ import { AppUser, Backend, DocRef, LedgerSnapshot, SubscribeHandlers } from './b
 export class FirebaseBackend extends Backend {
   readonly mode = 'firebase' as const;
   readonly user = signal<AppUser | null | undefined>(undefined);
-  private readonly app: FirebaseApp;
+  readonly app: FirebaseApp;
   private readonly auth: Auth;
   private readonly db: Firestore;
 
   constructor() {
     super();
     this.app = initializeApp(firebaseConfig);
+    if (aiConfig.appCheckSiteKey) {
+      initializeAppCheck(this.app, { provider: new ReCaptchaV3Provider(aiConfig.appCheckSiteKey), isTokenAutoRefreshEnabled: true });
+    }
     this.auth = getAuth(this.app);
     // Offline cache: the app opens instantly and works without a connection; writes sync when back online.
     this.db = initializeFirestore(this.app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
@@ -110,8 +114,14 @@ export class FirebaseBackend extends Backend {
     return deleteDoc(this.docRef(uid, ref));
   }
 
+  async get<T>(uid: string, ref: DocRef): Promise<T | null> {
+    const snap = await getDoc(this.docRef(uid, ref));
+    return snap.exists() ? (snap.data() as T) : null;
+  }
+
   private docRef(uid: string, ref: DocRef) {
-    return doc(this.db, 'users', uid, ref.kind === 'ledger' ? 'ledger' : 'months', ref.id);
+    const coll = ref.kind === 'ledger' ? 'ledger' : ref.kind === 'month' ? 'months' : 'receipts';
+    return doc(this.db, 'users', uid, coll, ref.id);
   }
 }
 

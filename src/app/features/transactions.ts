@@ -29,6 +29,7 @@ import { EMPTY_FILTERS, TxFilters, UiState } from '../state/ui.state';
       <div class="row-actions">
         @if (activeCount()) {<button class="btn sm ghost" (click)="clear()">Clear {{ activeCount() }} filter{{ activeCount() > 1 ? 's' : '' }}</button>}
         <button class="btn sm" (click)="exp.transactionsCSV(filtered(), 'transactions-' + today + '.csv')"><app-icon name="download" />Export CSV</button>
+        <button class="btn sm" (click)="actions.scan()"><app-icon name="scan" />Scan receipts</button>
         <button class="btn sm" (click)="actions.importCsv()"><app-icon name="upload" />Import CSV</button>
       </div>
     </section>

@@ -10,16 +10,20 @@ import { DialogService } from '../shared/dialog.service';
 import { Modal } from '../shared/modal';
 import { ToastService } from '../shared/toast.service';
 import { LedgerStore } from '../state/ledger.store';
+import { Icon } from '../shared/icon';
 import { activeAccounts, categoriesOf, currencyChoices, ensureCurrency } from './form-helpers';
+import { ScanDialog } from './scan-dialog';
 
 @Component({
   selector: 'app-tx-form',
-  imports: [Modal, ReactiveFormsModule],
+  imports: [Modal, ReactiveFormsModule, Icon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <app-modal [heading]="isNew() ? 'Add transaction' : 'Edit transaction'">
       <form [formGroup]="form" (ngSubmit)="save()" novalidate>
         <div class="modal-body">
+          @if (isNew()) {<button type="button" class="scan-cta" (click)="dialog.open(scanDialog)"><app-icon name="scan" /><span><b>Scan a receipt or payslip</b><small>Fill this in automatically from a photo or PDF</small></span></button>}
+          @if (tx()?.receiptId) {<button type="button" class="btn sm receipt-link" (click)="viewReceipt()"><app-icon name="clip" />View receipt</button>}
           <div class="seg type-seg" role="radiogroup" aria-label="Type">
             @for (t of types; track t[0]) {
               <button type="button" role="radio" [attr.aria-checked]="type() === t[0]" [class]="'t-' + t[0]" (click)="setType(t[0])">{{ t[1] }}</button>
@@ -97,6 +101,7 @@ export class TxForm implements OnInit {
   protected readonly error = signal('');
   protected readonly primary = this.store.primary;
   protected curTouched = false;
+  protected readonly scanDialog = ScanDialog;
   private id = uid();
 
   protected readonly form = this.fb.group({
@@ -159,6 +164,11 @@ export class TxForm implements OnInit {
     });
   }
 
+  protected viewReceipt() {
+    const t = this.tx();
+    if (t) void import('./receipt-viewer').then((m) => this.dialog.open(m.ReceiptViewer, { tx: t }));
+  }
+
   protected setType(t: TxType) {
     this.type.set(t);
     this.form.patchValue({ categoryId: this.cats()[0]?.id ?? '' });
@@ -181,6 +191,7 @@ export class TxForm implements OnInit {
     };
     if (prev?.recurringId) tx.recurringId = prev.recurringId;
     if (prev?.importId) tx.importId = prev.importId;
+    if (prev?.receiptId) tx.receiptId = prev.receiptId;
     if (this.hasTo()) {
       tx.toAccountId = v.toAccountId || null;
       if (type === 'transfer') {

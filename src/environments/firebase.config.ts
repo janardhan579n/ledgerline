@@ -13,6 +13,17 @@ export const firebaseConfig = {
   appId: '1:887885056752:web:857a6da0565af806415035',
 };
 
+/**
+ * Receipt and payslip scanning (Firebase AI Logic → Gemini Developer API).
+ * Turn it on once in the Firebase console: AI Services → AI Logic → Get started → Gemini Developer API.
+ * Models are tried in order; if one isn't available to your project the next is used.
+ * appCheckSiteKey: optional reCAPTCHA v3 site key. When set, only your hosted app can use your AI quota (see README).
+ */
+export const aiConfig = {
+  models: ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-2.5-flash'],
+  appCheckSiteKey: '',
+};
+
 /** Set to true to point the app at the local Firebase emulators (npm run emulators). */
 export const useEmulators = false;
 

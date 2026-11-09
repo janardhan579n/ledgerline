@@ -4,7 +4,7 @@ import { monthKey, todayISO } from '../core/dates';
 import { defaultPlan, defaultSettings, normalizePlan, uid } from '../core/defaults';
 import { Finance, nextOccurrence } from '../core/finance';
 import { MarketRates, Plan, Settings, Transaction } from '../core/models';
-import { Backend } from '../data/backend';
+import { Backend, ReceiptDoc } from '../data/backend';
 import { ToastService } from '../shared/toast.service';
 
 type Status = 'signed-out' | 'loading' | 'ready' | 'error';
@@ -129,14 +129,30 @@ export const LedgerStore = signalStore(
       deleteTx(tx: Transaction) {
         const k = monthKey(tx.date);
         patchState(store, { months: { ...store.months(), [k]: (store.months()[k] ?? []).filter((t) => t.id !== tx.id) } });
+        const u = store.uid();
+        // Remove the receipt copy once no transaction points at it.
+        if (u && tx.receiptId && !store.transactions().some((t) => t.receiptId === tx.receiptId)) {
+          enqueue('receipts/' + tx.receiptId, () => backend.remove(u, { kind: 'receipt', id: tx.receiptId! }));
+        }
         return writeMonth(k);
+      },
+      saveReceipt(doc: ReceiptDoc) {
+        const u = store.uid();
+        if (!u) return Promise.resolve();
+        return enqueue('receipts/' + doc.id, () => backend.write(u, { kind: 'receipt', id: doc.id }, doc));
+      },
+      getReceipt(id: string): Promise<ReceiptDoc | null> {
+        const u = store.uid();
+        return u ? backend.get<ReceiptDoc>(u, { kind: 'receipt', id }) : Promise.resolve(null);
       },
       async deleteEverything() {
         const u = store.uid();
         if (!u) return;
         const keys = Object.keys(store.months());
+        const receipts = [...new Set(store.transactions().map((t) => t.receiptId).filter((x): x is string => !!x))];
         patchState(store, { months: {}, settings: null, plan: null });
         await Promise.all([
+          ...receipts.map((id) => backend.remove(u, { kind: 'receipt', id })),
           ...keys.map((k) => backend.remove(u, { kind: 'month', id: k })),
           backend.remove(u, { kind: 'ledger', id: 'plan' }),
           backend.remove(u, { kind: 'ledger', id: 'settings' }),
@@ -197,7 +213,7 @@ export const LedgerStore = signalStore(
               if (snap.fromServer) clearTimeout(slowTimer);
               if (snap.fromServer && snap.settings && !autoPosted) {
                 autoPosted = true;
-                setTimeout(() => (store as unknown as { autoPostRecurring: () => number }).autoPostRecurring(), 300);
+                setTimeout(() => store.autoPostRecurring(), 300);
               }
             },
             error: (message) => patchState(store, { status: store.settings() ? 'ready' : 'error', note: message }),

@@ -42,6 +42,7 @@ import { NAV } from './nav';
               <button class="btn ghost icon-only" (click)="step(1)" [disabled]="atLimit()" aria-label="Next month"><app-icon name="chevR" /></button>
             </div>
           }
+          <button class="btn scan-btn" (click)="actions.scan()"><app-icon name="scan" />Scan</button>
           <button class="btn primary add-btn" (click)="actions.addTx()"><app-icon name="plus" />Add</button>
         </header>
         @if (backend.mode === 'demo') {<div class="banner warning"><app-icon name="alert" /><span><b>Demo mode.</b> Firebase isn't configured, so nothing you enter is saved. See the README to connect your own project.</span></div>}

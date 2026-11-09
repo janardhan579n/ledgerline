@@ -11,7 +11,19 @@ export interface AppUser {
 /** Where each piece of a user's ledger is stored. Everything lives under users/{uid}/. */
 export type DocRef =
   | { kind: 'ledger'; id: 'settings' | 'plan' | 'market' }
-  | { kind: 'month'; id: string }; // YYYY-MM, holds { month, items: Transaction[] }
+  | { kind: 'month'; id: string } // YYYY-MM, holds { month, items: Transaction[] }
+  | { kind: 'receipt'; id: string }; // a stored copy of a scanned receipt (ReceiptDoc)
+
+/** A small copy of an uploaded receipt or payslip, kept with its transactions. */
+export interface ReceiptDoc {
+  id: string;
+  name: string;
+  mime: string;
+  /** base64, no data: prefix */
+  data: string;
+  size: number;
+  createdAt: string;
+}
 
 export interface LedgerSnapshot {
   settings: Settings | null;
@@ -40,4 +52,6 @@ export abstract class Backend {
   abstract subscribe(uid: string, h: SubscribeHandlers): () => void;
   abstract write(uid: string, ref: DocRef, data: object): Promise<void>;
   abstract remove(uid: string, ref: DocRef): Promise<void>;
+  /** One-off read of a document that isn't part of the live snapshot (receipt copies). */
+  abstract get<T = unknown>(uid: string, ref: DocRef): Promise<T | null>;
 }
