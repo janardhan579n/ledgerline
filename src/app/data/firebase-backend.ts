@@ -49,7 +49,7 @@ export class FirebaseBackend extends Backend {
     if (!this.appCheck) out.push({ name: 'App Check', ok: false, detail: 'Not configured (no site key in firebase.config.ts).' });
     else {
       try {
-        const r = await within(getToken(this.appCheck, true), 20000, 'No token after 20 s (reCAPTCHA did not answer).');
+        const r = await within(getToken(this.appCheck, false), 20000, 'No token after 20 s (reCAPTCHA did not answer).');
         out.push({ name: 'App Check', ok: true, detail: `Token received in ${Math.round(performance.now() - t0)} ms.` });
         void r;
       } catch (e) {
