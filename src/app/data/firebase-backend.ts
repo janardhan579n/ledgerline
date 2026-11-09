@@ -77,7 +77,7 @@ export class FirebaseBackend extends Backend {
       h.next({ ...state, months: { ...state.months }, fromServer: ledgerServer && monthsServer });
     };
     const fail = (e: { code?: string }) =>
-      h.error(e.code === 'permission-denied' ? 'Access to your data was refused. Sign out and sign in again.' : 'Live updates stopped. Reload to reconnect.');
+      h.error(e.code === 'permission-denied' ? `This Google account (${this.user()?.email ?? 'unknown'}) isn't allowed to use this app. Sign out and use an allowed account.` : 'Live updates stopped. Reload to reconnect.');
 
     const unLedger = onSnapshot(collection(this.db, 'users', uid, 'ledger'), { includeMetadataChanges: true }, (snap) => {
       state.settings = null; state.plan = null; state.market = null;

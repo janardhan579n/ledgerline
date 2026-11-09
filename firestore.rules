@@ -6,12 +6,18 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Only these Google accounts can use the app. Add family members' Gmail addresses here,
+    // then run: npx firebase deploy --only firestore:rules
+    function isAllowed() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in [
+          'janardhan579n@gmail.com'
+        ];
+    }
+
     function isOwner(uid) {
-      return request.auth != null && request.auth.uid == uid;
-      // To limit the app to specific people (you and family), use this line instead and list their emails:
-      // return request.auth != null && request.auth.uid == uid
-      //   && request.auth.token.email_verified == true
-      //   && request.auth.token.email in ['you@gmail.com', 'family@gmail.com'];
+      return isAllowed() && request.auth.uid == uid;
     }
 
     // settings, plan (budgets, goals, recurring, debts, assumptions) and cached market rates
