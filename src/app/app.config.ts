@@ -15,6 +15,9 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes, withComponentInputBinding(), withInMemoryScrolling({ scrollPositionRestoration: 'top' })),
     { provide: Backend, useClass: isFirebaseConfigured() ? FirebaseBackend : DemoBackend },
     { provide: ReceiptReader, useClass: isFirebaseConfigured() ? GeminiReader : DemoReader },
-    provideServiceWorker('ngsw-worker.js', { enabled: !isDevMode(), registrationStrategy: 'registerWhenStable:30000' }),
+    // The service worker fetches every request the page makes, under the CSP it was installed with, so its
+    // connect-src must cover all outside hosts the page loads from. Bump ?v= whenever firebase.json's CSP
+    // changes: the new URL makes browsers install a fresh worker with the new policy.
+    provideServiceWorker('ngsw-worker.js?v=2', { enabled: !isDevMode(), registrationStrategy: 'registerWhenStable:30000' }),
   ],
 };
