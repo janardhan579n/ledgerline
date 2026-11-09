@@ -238,7 +238,7 @@ export class Finance {
     for (const r of this.ledger.plan.recurring) {
       if (r.active === false || !r.nextDate) continue;
       let d = r.nextDate, guard = 0;
-      while (d <= today && guard++ < 24) { out.push({ r, date: d }); d = nextOccurrence(r, d); }
+      while (d <= today && (!r.endDate || d <= r.endDate) && guard++ < 24) { out.push({ r, date: d }); d = nextOccurrence(r, d); }
     }
     return out.sort((a, b) => a.date.localeCompare(b.date));
   }
@@ -251,7 +251,7 @@ export class Finance {
       if (r.active === false || !r.nextDate) continue;
       let d = r.nextDate, guard = 0;
       while (d <= today && guard++ < 24) d = nextOccurrence(r, d);
-      if (d <= lim) out.push({ r, date: d });
+      if (d <= lim && (!r.endDate || d <= r.endDate)) out.push({ r, date: d });
     }
     return out.sort((a, b) => a.date.localeCompare(b.date));
   }

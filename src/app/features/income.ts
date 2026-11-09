@@ -56,7 +56,7 @@ export const freqText = (r: Recurring) =>
               <li [class.paused]="r.r.active === false">
                 <span class="tx-ico" [class]="'tx-ico t-' + r.r.type"><app-icon [name]="r.r.type" /></span>
                 <span class="tx-main"><b>{{ r.r.name }}@if (r.r.isSalary) { <span class="pill neutral">Salary</span>}@if (r.r.autoPost) { <span class="pill neutral">Auto-record</span>}</b>
-                  <small>{{ freq(r.r) }} · {{ fin().accName(r.r.accountId) }} · {{ r.r.active === false ? 'Paused' : 'next ' + date(r.next) }}</small></span>
+                  <small>{{ freq(r.r) }} · {{ fin().accName(r.r.accountId) }} · {{ r.r.active === false ? 'Paused' : r.r.endDate && r.next > r.r.endDate ? 'Ended ' + date(r.r.endDate) : 'next ' + date(r.next) }}@if (r.r.endDate && r.next <= r.r.endDate) { · until {{ date(r.r.endDate) }}}</small></span>
                 <b>{{ r.r.amount | money: r.r.currency }}@if (r.r.currency !== P()) {<small>≈ {{ fin().convert(r.r.amount, r.r.currency, P()) | money: P() }}</small>}</b>
                 <button class="btn sm ghost icon-only" (click)="actions.recurring(r.r)" [attr.aria-label]="'Edit ' + r.r.name"><app-icon name="edit" /></button>
               </li>

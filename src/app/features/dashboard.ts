@@ -1,6 +1,7 @@
+import { loanStatus } from '../core/loans';
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { addMonths, dateLabel, monthLabel, periodRange } from '../core/dates';
+import { addMonths, dateLabel, monthLabel, periodRange, todayISO } from '../core/dates';
 import { Actions } from '../shared/actions.service';
 import { Delta, StatusPill, TxList } from '../shared/bits';
 import { BarChart, HBars, Legend, Progress } from '../shared/charts';
@@ -80,6 +81,18 @@ import { Alerts } from './alerts';
             <button class="btn sm" (click)="actions.goal()">Add a goal</button>
           }
         </section>
+        @if (loans().length) {
+          <section class="card">
+            <div class="card-h"><h3>Loans & EMIs</h3><a class="link" routerLink="/loans">Details</a></div>
+            <ul class="mini-list">
+              @for (l of loans(); track l.d.id) {
+                <li><div class="ml-top"><span>{{ l.d.name }}</span><b>{{ l.s.payable | money: l.d.currency }}</b></div>
+                  @if (l.s.life) {<app-progress [value]="l.s.life.progress" status="goal" />}
+                  <small>{{ l.s.left }} EMI{{ l.s.left === 1 ? '' : 's' }} of {{ l.s.emi | money: l.d.currency }} left · next {{ date(l.s.nextDate!) }}</small></li>
+              }
+            </ul>
+          </section>
+        }
         <section class="card">
           <div class="card-h"><h3>Accounts</h3><span class="muted">{{ balances().missing ? 'partial total' : 'total' }} {{ balances().total | money: P() }}</span></div>
           @for (grp of balances().groups; track grp.cur) {
@@ -106,6 +119,10 @@ export default class Dashboard {
   protected readonly date = (d: string) => dateLabel(d, true);
 
   protected readonly s = computed(() => this.fin().monthSummary(this.ui.month()));
+  protected readonly loans = computed(() => {
+    const today = todayISO();
+    return this.store.planView().debts.filter((d) => d.emi).map((d) => ({ d, s: loanStatus(d, today)! })).filter((x) => !x.s.done).slice(0, 4);
+  });
   private readonly prev = computed(() => this.fin().monthSummary(addMonths(this.ui.month(), -1)));
   protected readonly tiles = computed(() => {
     const s = this.s(), p = this.prev();

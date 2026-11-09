@@ -98,6 +98,10 @@ export interface Recurring {
   isSalary?: boolean;
   autoPost?: boolean;
   active?: boolean;
+  /** Last date this can occur (e.g. the final EMI of a loan). */
+  endDate?: string;
+  /** Set when this schedule was created for an EMI loan. */
+  debtId?: string;
 }
 
 export interface Debt {
@@ -107,6 +111,26 @@ export interface Debt {
   currency: string;
   apr: number;
   minPayment: number;
+  /** Present for EMI loans. `balance` and `apr` are then a snapshot as of `emi.nextDate`. */
+  emi?: EmiInfo;
+}
+
+export interface EmiInfo {
+  amount: number;
+  /** EMIs left, counting the one due on `nextDate`. */
+  monthsLeft: number;
+  /** Date of the next EMI when the loan was last saved. Later EMIs are assumed paid on time. */
+  nextDate: string;
+  /** Day of the month the EMI is debited. */
+  day: number;
+  /** What the rate was worked out from. */
+  basis: 'rate' | 'outstanding' | 'original' | 'none';
+  kind?: 'home' | 'car' | 'personal' | 'education' | 'card-emi' | 'gold' | 'other';
+  lender?: string;
+  original?: number;
+  tenure?: number;
+  accountId?: string;
+  recurringId?: string;
 }
 
 export interface Assumptions {

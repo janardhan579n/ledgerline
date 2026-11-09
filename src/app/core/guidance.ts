@@ -1,3 +1,4 @@
+import { debtBalanceNow } from './loans';
 import { addMonths, periodRange, todayISO } from './dates';
 import { Finance, GoalPlan, Summary } from './finance';
 import { Assumptions, Debt, Goal } from './models';
@@ -66,7 +67,10 @@ export function computeGuidance(fin: Finance, a: Assumptions, today = todayISO()
   const emergencyTarget = a.emergencyMonths * avgEssential;
   const starterTarget = a.starterMonths * avgEssential;
 
-  const debts: DebtView[] = fin.ledger.plan.debts.map((d) => ({ ...d, balancePrimary: fin.convert(Number(d.balance) || 0, d.currency, P) ?? 0 }));
+  const debts: DebtView[] = fin.ledger.plan.debts.map((d) => {
+    const balance = debtBalanceNow(d, today);
+    return { ...d, balance, balancePrimary: fin.convert(balance, d.currency, P) ?? 0 };
+  });
   const highDebts = debts.filter((d) => Number(d.apr) >= a.highInterestApr && d.balancePrimary > 0).sort((x, y) => y.apr - x.apr);
   const highDebtTotal = highDebts.reduce((x, d) => x + d.balancePrimary, 0);
 

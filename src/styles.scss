@@ -126,6 +126,7 @@ main { min-width: 0; padding: 0 28px 40px; }
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .span-2 { grid-column: span 2; }
 .empty { text-align: center; color: var(--muted); padding: 28px 16px; }
+.card.empty .row-actions { justify-content: center; }
 .empty-sm { color: var(--muted); font-size: .9rem; margin-bottom: 10px; }
 .note { font-size: .85rem; }
 .welcome { padding: 28px; }
@@ -547,3 +548,28 @@ button.tile:hover { border-color: var(--accent); }
   .br-head { flex-wrap: wrap; }
   .br-sum { flex-basis: 100%; order: 5; white-space: normal; }
 }
+
+/* Loans & EMIs */
+.loan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+.loan .card-h { align-items: flex-start; }
+.loan .card-h h3 { margin: 0; }
+.loan.closed { opacity: .75; }
+.split-bar { display: flex; gap: 2px; height: 10px; margin: 4px 0 6px; }
+.split-bar span { display: block; border-radius: 4px; min-width: 4px; }
+.split-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--ink-2); }
+.split-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.split-legend i { width: 9px; height: 9px; border-radius: 3px; }
+.split-legend b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.loan-life { border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.loan-life .kv { margin-bottom: 4px; }
+.loan .row-actions { margin-top: 4px; }
+.btn.on { border-color: var(--accent); background: var(--accent-soft); }
+.loan-panel { margin-top: 12px; padding: 12px; border-radius: 12px; background: var(--surface-2); display: flex; flex-direction: column; gap: 10px; }
+.loan-panel .table-wrap { max-height: 320px; overflow: auto; }
+.whatif { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--good-bg); }
+.link-btn { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
+.loan-preview { padding: 12px; border-radius: 12px; background: var(--accent-soft); margin: 0; }
+.loan-sched { border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.short-input { max-width: 220px; }
+.input-unit.short { max-width: 220px; }
+@media (max-width: 640px) { .loan-grid { grid-template-columns: 1fr; } }

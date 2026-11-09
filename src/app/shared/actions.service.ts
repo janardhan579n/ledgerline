@@ -28,7 +28,9 @@ export class Actions {
   budget(budget: Budget | null = null, presetCategory = '') { return this.dialog.open(BudgetForm, { budget, presetCategory }); }
   goal(goal: Goal | null = null, emergency = false, suggestedTarget: number | null = null) { return this.dialog.open(GoalForm, { goal, emergency, suggestedTarget }); }
   recurring(item: Recurring | null = null) { return this.dialog.open(RecurringForm, { item }); }
-  debt(debt: Debt | null = null) { return this.dialog.open(DebtForm, { debt }); }
+  debt(debt: Debt | null = null) { return debt?.emi ? this.loan(debt) : this.dialog.open(DebtForm, { debt }); }
+  /** EMI loan form, loaded on demand. */
+  loan(debt: Debt | null = null) { return import('../forms/loan-form').then((m) => this.dialog.open(m.LoanForm, { debt })); }
   scan() {
     if (!this.store.settingsView().accounts.length) {
       this.toast.show('Add an account first.');

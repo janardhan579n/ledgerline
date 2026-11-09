@@ -30,6 +30,7 @@ export const routes: Routes = [
       { path: 'income', loadComponent: () => import('./features/income') },
       { path: 'budgets', loadComponent: () => import('./features/budgets') },
       { path: 'goals', loadComponent: () => import('./features/goals') },
+      { path: 'loans', loadComponent: () => import('./features/loans') },
       { path: 'reports', loadComponent: () => import('./features/reports') },
       { path: 'cashflow', loadComponent: () => import('./features/cashflow') },
       { path: 'guidance', loadComponent: () => import('./features/guidance') },

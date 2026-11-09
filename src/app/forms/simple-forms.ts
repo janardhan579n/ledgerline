@@ -322,6 +322,7 @@ export class RecurringForm extends FormBase implements OnInit {
     if (!(amount > 0)) return this.error.set('Enter an amount greater than zero.');
     if (!v.nextDate) return this.error.set('Choose the next date.');
     const r: Recurring = {
+      ...this.item(), // keeps links such as an EMI loan's end date
       id: this.item()?.id ?? uid(), name: v.name.trim(), type: this.type(), amount, currency: v.currency, accountId: v.accountId, categoryId: v.categoryId || null,
       freq: v.freq as Frequency, day: Number(v.nextDate.slice(8)), nextDate: v.nextDate, isSalary: v.isSalary, autoPost: v.autoPost, active: this.isNew() ? true : v.active,
     };

@@ -50,6 +50,21 @@ Tap **Scan** (or **Scan a receipt or payslip** in the Add form), choose photos o
   4. In **App Check → APIs**, enforce **Firebase AI Logic** (and later Cloud Firestore, once its chart shows almost all requests verified).
   Classic reCAPTCHA v3 keys can no longer be registered with App Check.
 
+## Loans & EMIs
+
+Loans & EMIs (in the menu) tracks each loan from a few details: the monthly EMI, the EMI date and how many EMIs are left.
+Add one more detail to see the interest: the interest rate, the outstanding principal (the rate is worked out),
+or the original amount and tenure (the rate is worked out). Without any of them you still see the total left to pay.
+
+For each loan: total still to pay, principal vs interest, next EMI and its interest/principal split, last EMI date,
+progress and interest paid so far (when the original amount and tenure are known), a year-by-year repayment schedule,
+and a prepayment what-if (one-time amount and/or extra each month; keep the EMI and finish sooner, or keep the end date
+and lower the EMI). The page totals all loans in your main currency and compares monthly EMIs with your average income.
+
+Figures roll forward on their own as EMI dates pass. Optionally the EMI is added to scheduled payments
+(it stops after the last EMI and can be recorded automatically as "Loan & card payments").
+Loan balances also feed the Guidance page. Calculations assume a fixed rate on a reducing balance.
+
 ## Batch upload from a template
 
 Transactions → **Batch upload** (or Setup → Import & export).
