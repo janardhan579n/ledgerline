@@ -56,6 +56,21 @@ export class FirebaseBackend extends Backend {
         out.push({ name: 'App Check', ok: false, detail: describe(e) });
       }
     }
+    // What the browser actually did with reCAPTCHA, to tell a blocked script from a key problem.
+    const g = (window as unknown as { grecaptcha?: { enterprise?: Record<string, unknown> } }).grecaptcha;
+    const res = performance.getEntriesByType('resource').filter((r) => /recaptcha/.test(r.name)).map((r) => r.name.replace(/^https:\/\//, '').split('?')[0].slice(0, 70));
+    const csp = (window as unknown as { __cspViolations?: string[] }).__cspViolations ?? [];
+    out.push({
+      name: 'reCAPTCHA details',
+      ok: typeof g?.enterprise?.['execute'] === 'function' && !csp.length,
+      detail: [
+        `script ready: ${typeof g?.enterprise?.['execute'] === 'function' ? 'yes' : g ? 'loader only' : 'no'}`,
+        `frames: ${document.querySelectorAll('iframe[src*="recaptcha"]').length}`,
+        `loaded: ${res.join(', ') || 'nothing'}`,
+        `blocked by CSP: ${csp.join('; ') || 'nothing'}`,
+        `browser: ${navigator.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 90)}`,
+      ].join(' · '),
+    });
     const uid = this.user()?.uid;
     if (!uid) out.push({ name: 'Database', ok: false, detail: 'Not signed in.' });
     else {
