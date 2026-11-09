@@ -89,6 +89,7 @@ import { LedgerStore } from '../state/ledger.store';
         <div class="card-h"><h3>Receipt scanning</h3><button class="btn sm primary" (click)="actions.scan()"><app-icon name="scan" />Scan now</button></div>
         <p class="small">Reads photos and PDFs of receipts, bills, invoices, payslips and statements, and suggests transactions for you to check before saving. Reader: <b>{{ reader.label }}</b>.</p>
         <p class="small muted">{{ reader.privacyNote }}</p>
+        <p class="recaptcha-note">This site is protected by reCAPTCHA and the Google <a href="https://policies.google.com/privacy">Privacy Policy</a> and <a href="https://policies.google.com/terms">Terms of Service</a> apply.</p>
         <label class="check"><input type="checkbox" [checked]="settings().scan?.keepCopies ?? true" (change)="setKeep($any($event.target).checked)"><span>Keep a small copy of each scanned file with its transaction</span></label>
       </section>
       <section class="card">

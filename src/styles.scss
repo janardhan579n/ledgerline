@@ -505,3 +505,8 @@ button.tile:hover { border-color: var(--accent); }
   .scan-total { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+
+/* reCAPTCHA v3 badge would cover the mobile tab bar; Google allows hiding it when the notice below is shown. */
+.grecaptcha-badge { visibility: hidden; }
+.recaptcha-note { font-size: .75rem; color: var(--muted); }
+.recaptcha-note a { color: inherit; }

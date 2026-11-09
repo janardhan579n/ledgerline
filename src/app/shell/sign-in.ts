@@ -21,6 +21,7 @@ import { Icon } from '../shared/icon';
           <li><app-icon name="flow" /><span>Enter amounts in any currency; totals convert to the one you choose.</span></li>
           <li><app-icon name="check" /><span>Works offline on your phone and syncs when you're back online.</span></li>
         </ul>
+        <p class="recaptcha-note">This site is protected by reCAPTCHA and the Google <a href="https://policies.google.com/privacy">Privacy Policy</a> and <a href="https://policies.google.com/terms">Terms of Service</a> apply.</p>
       </div>
     </main>`,
 })
