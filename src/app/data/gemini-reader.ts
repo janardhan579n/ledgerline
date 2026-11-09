@@ -94,23 +94,35 @@ function details(e: unknown): { code: string; status: number; message: string } 
   return { code: String(err?.code ?? ''), status: Number(err?.customErrorData?.status ?? 0), message: String(err?.message ?? '') };
 }
 
+/** The server's own explanation, trimmed, so a failure can be diagnosed from a screenshot. */
+function serverReason(d: { status: number; message: string }): string {
+  const m = d.message.replace(/^.*?\]\s*/, '').replace(/\s*\[\{.*$/, '').replace(/https?:\/\/\S+/g, '').trim();
+  return `HTTP ${d.status || 'n/a'}${m ? ': ' + m.slice(0, 160) : ''}`;
+}
+
 function isModelUnavailable(e: unknown): boolean {
   const d = details(e);
-  return d.status === 404 || /not found|not supported|is not available|no longer available|deprecated/i.test(d.message);
+  return d.status === 404 || ((d.status === 400 || d.status === 403) && /model/i.test(d.message) && /not (found|supported|available)|no longer|deprecated|access/i.test(d.message));
 }
 
 function toReadError(e: unknown): ReadError {
+  console.error('Receipt scan failed', e);
   const d = details(e);
+  const why = ` (${serverReason(d)})`;
   if (d.code === 'api-not-enabled' || /has not been used|is disabled|SERVICE_DISABLED/i.test(d.message))
-    return new ReadError('Receipt scanning is not switched on yet. In the Firebase console open AI Services → AI Logic → Get started → Gemini Developer API, wait a minute, then try again.');
+    return new ReadError('Receipt scanning is not switched on yet. In the Firebase console open AI Services → AI Logic → Get started → Gemini Developer API, wait a few minutes, then try again.' + why);
   if (d.status === 429 || /quota|RESOURCE_EXHAUSTED|rate limit/i.test(d.message))
-    return new ReadError("The free AI limit is used up for now. Wait a minute (or until tomorrow for the daily limit) and try again, or enter it manually.", true);
-  if (d.code === 'fetch-error' || /network|Failed to fetch/i.test(d.message))
-    return new ReadError("Couldn't reach the AI service. Check your connection and try again.", true);
+    return new ReadError('The free AI limit is used up for now. Wait a minute (or until tomorrow for the daily limit) and try again, or enter it manually.' + why, true);
+  if (isModelUnavailable(e))
+    return new ReadError('None of the AI models in the app config are available to this project. Update aiConfig.models in firebase.config.ts.' + why);
   if (/app.?check/i.test(d.message))
-    return new ReadError('The AI service rejected this app (App Check). Check the App Check setup in the README.');
+    return new ReadError('The AI service rejected this app (App Check). Check the App Check setup in the README.' + why);
+  if (d.status === 403 && /api key|referer|referrer|blocked|PERMISSION_DENIED/i.test(d.message))
+    return new ReadError("The project's API key isn't allowed to use the AI service. In Google Cloud Console → Credentials, allow the Firebase AI Logic API for this key." + why);
   if (d.status === 400 && /size|too large|payload/i.test(d.message))
-    return new ReadError('That file is too large to read. Try a smaller photo or a single-page PDF.');
-  if (/safety|blocked/i.test(d.message)) return new ReadError("The AI declined to read this file. Enter it manually.");
-  return new ReadError("Couldn't read this file. Try again, use a clearer photo, or enter it manually.", true);
+    return new ReadError('That file is too large to read. Try a smaller photo or a single-page PDF.' + why);
+  if (/safety|blocked/i.test(d.message)) return new ReadError('The AI declined to read this file. Enter it manually.' + why);
+  if (!d.status && /Failed to fetch|NetworkError|Load failed|network/i.test(d.message))
+    return new ReadError("Couldn't reach the AI service. Check your connection and try again." + why, true);
+  return new ReadError("Couldn't read this file. Try again, use a clearer photo, or enter it manually." + why, true);
 }

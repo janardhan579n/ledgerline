@@ -20,7 +20,7 @@ export const firebaseConfig = {
  * appCheckSiteKey: optional reCAPTCHA v3 site key. When set, only your hosted app can use your AI quota (see README).
  */
 export const aiConfig = {
-  models: ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-2.5-flash'],
+  models: ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash'],
   appCheckSiteKey: '',
 };
 
