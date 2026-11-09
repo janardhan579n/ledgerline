@@ -43,7 +43,12 @@ Tap **Scan** (or **Scan a receipt or payslip** in the Add form), choose photos o
 - **Privacy:** on the free tier Google may use what you send to improve its products, and human reviewers may read it. If you'd rather avoid that, link a billing account (Blaze plan); then your files aren't used for training, at a cost of a few cents a month for personal use.
 - **Models:** set in `src/environments/firebase.config.ts` (`aiConfig.models`), tried in order. Update the list if Google retires a model.
 - **Receipt copies:** if "Keep a small copy" is ticked, photos are shrunk to about 300 KB and stored in `users/{uid}/receipts/`, readable only by you. Open one from the transaction with **View receipt**.
-- **Protect your AI quota (optional):** anyone who copies your web config could use your free AI requests. To stop that, create a reCAPTCHA v3 key for `personal-ledger.web.app`, register it under Firebase **App Check**, put the site key in `aiConfig.appCheckSiteKey`, deploy, then turn on **Enforce** for AI Logic in App Check.
+- **Protect your AI quota (App Check):** anyone who copies your web config could use your free AI requests. App Check stops that:
+  1. Google Cloud console (project ledgerline-4e2d3) → **Security → Fraud Defense** (formerly reCAPTCHA Enterprise) → **Create key**: platform **Website**, add domains `personal-ledger.web.app`, `ledgerline-4e2d3.web.app`, `ledgerline-4e2d3.firebaseapp.com`, `localhost`; no checkbox challenge. Copy the key ID.
+  2. Firebase console → **App Check → Apps** → your web app → **reCAPTCHA Enterprise / Fraud Defense** → paste the key ID → Save. Set the token time-to-live to 1 day to use fewer of the 10,000 free monthly checks.
+  3. Put the key ID in `aiConfig.appCheckSiteKey`, build and deploy.
+  4. In **App Check → APIs**, enforce **Firebase AI Logic** (and later Cloud Firestore, once its chart shows almost all requests verified).
+  Classic reCAPTCHA v3 keys can no longer be registered with App Check.
 
 ## How data is protected
 

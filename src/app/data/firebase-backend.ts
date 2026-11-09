@@ -8,7 +8,7 @@ import {
   Firestore, clearIndexedDbPersistence, collection, getDoc, connectFirestoreEmulator, deleteDoc, doc, initializeFirestore, onSnapshot,
   persistentLocalCache, persistentMultipleTabManager, setDoc, terminate,
 } from 'firebase/firestore';
-import { ReCaptchaV3Provider, initializeAppCheck } from 'firebase/app-check';
+import { ReCaptchaEnterpriseProvider, initializeAppCheck } from 'firebase/app-check';
 import { aiConfig, firebaseConfig, useEmulators } from '../../environments/firebase.config';
 import { MarketRates, Plan, Settings, Transaction } from '../core/models';
 import { AppUser, Backend, DocRef, LedgerSnapshot, SubscribeHandlers } from './backend';
@@ -25,7 +25,7 @@ export class FirebaseBackend extends Backend {
     super();
     this.app = initializeApp(firebaseConfig);
     if (aiConfig.appCheckSiteKey) {
-      initializeAppCheck(this.app, { provider: new ReCaptchaV3Provider(aiConfig.appCheckSiteKey), isTokenAutoRefreshEnabled: true });
+      initializeAppCheck(this.app, { provider: new ReCaptchaEnterpriseProvider(aiConfig.appCheckSiteKey), isTokenAutoRefreshEnabled: true });
     }
     this.auth = getAuth(this.app);
     // Offline cache: the app opens instantly and works without a connection; writes sync when back online.

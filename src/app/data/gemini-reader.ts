@@ -59,7 +59,7 @@ export class GeminiReader extends ReceiptReader {
     if (!this.models) {
       const ai = getAI(this.backend.app, { backend: new GoogleAIBackend() });
       this.models = aiConfig.models.map((model) =>
-        getGenerativeModel(ai, { model, generationConfig: { responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA, temperature: 0 } }),
+        getGenerativeModel(ai, { model, generationConfig: { responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA, temperature: 0 } }, { timeout: 60_000 }),
       );
     }
     return this.models;
@@ -70,7 +70,11 @@ export class GeminiReader extends ReceiptReader {
     let lastError: unknown = null;
     for (let i = this.working; i < models.length; i++) {
       try {
-        const res = await models[i].generateContent([{ type: 'text', text: req.prompt }, { type: 'inlineData', inlineData: { mimeType: req.mime, data: req.data } }]);
+        // Hard stop so the screen never hangs on "Reading…" (e.g. while App Check can't get a token).
+        const res = await withTimeout(
+          models[i].generateContent([{ type: 'text', text: req.prompt }, { type: 'inlineData', inlineData: { mimeType: req.mime, data: req.data } }]),
+          75_000,
+        );
         this.working = i;
         const text = res.response.text();
         try {
@@ -87,6 +91,13 @@ export class GeminiReader extends ReceiptReader {
     }
     throw toReadError(lastError);
   }
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new ReadError('Reading took too long and was stopped. Check your connection and try again; if it keeps happening, the App Check setup may be incomplete (see README).', true)), ms);
+    p.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+  });
 }
 
 function details(e: unknown): { code: string; status: number; message: string } {
