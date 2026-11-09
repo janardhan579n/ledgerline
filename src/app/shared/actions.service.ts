@@ -40,6 +40,14 @@ export class Actions {
     if (!this.store.settingsView().accounts.length) return this.account();
     return this.dialog.open(ImportCsv);
   }
+  batchUpload() {
+    if (!this.store.settingsView().accounts.length) {
+      this.toast.show('Add an account first.');
+      return this.account();
+    }
+    // Loaded on demand: the review screen is only needed when someone uploads a file.
+    return import('../forms/batch-upload').then((m) => this.dialog.open(m.BatchUpload));
+  }
 
   /** Savings transaction pre-filled for a goal. */
   goalMoney(g: Goal, out: boolean) {

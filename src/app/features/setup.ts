@@ -8,6 +8,7 @@ import { Backend } from '../data/backend';
 import { RatesService } from '../data/rates.service';
 import { ReceiptReader } from '../data/receipt-reader';
 import { Actions } from '../shared/actions.service';
+import { BatchService } from '../shared/batch.service';
 import { confirmAction } from '../shared/confirm-dialog';
 import { DialogService } from '../shared/dialog.service';
 import { ExportService } from '../shared/export.service';
@@ -82,7 +83,9 @@ import { LedgerStore } from '../state/ledger.store';
       <section class="card">
         <div class="card-h"><h3>Import & export</h3></div>
         <div class="stack">
-          <button class="btn" (click)="actions.importCsv()"><app-icon name="upload" />Import transactions from CSV</button>
+          <button class="btn" (click)="actions.batchUpload()"><app-icon name="upload" />Batch upload from template (Excel or CSV)</button>
+          <button class="btn" (click)="batch.downloadTemplate()"><app-icon name="download" />Download batch template (.xlsx)</button>
+          <button class="btn" (click)="actions.importCsv()"><app-icon name="upload" />Import a bank statement CSV</button>
           <button class="btn" (click)="exp.transactionsCSV(store.transactions(), 'all-transactions.csv')"><app-icon name="download" />Export all transactions (CSV)</button>
           <button class="btn" (click)="exp.backupJSON()"><app-icon name="download" />Download full backup (JSON)</button>
         </div>
@@ -124,6 +127,7 @@ export default class Setup {
   protected readonly store = inject(LedgerStore);
   protected readonly actions = inject(Actions);
   protected readonly exp = inject(ExportService);
+  protected readonly batch = inject(BatchService);
   protected readonly rates = inject(RatesService);
   protected readonly backend = inject(Backend);
   protected readonly reader = inject(ReceiptReader);

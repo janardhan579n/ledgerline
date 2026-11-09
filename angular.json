@@ -39,7 +39,8 @@
               "canvg",
               "core-js",
               "raf",
-              "rgbcolor"
+              "rgbcolor",
+              "exceljs"
             ]
           },
           "configurations": {
@@ -47,7 +48,7 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "1.2MB",
+                  "maximumWarning": "1.3MB",
                   "maximumError": "1.6MB"
                 },
                 {

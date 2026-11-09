@@ -50,6 +50,24 @@ Tap **Scan** (or **Scan a receipt or payslip** in the Add form), choose photos o
   4. In **App Check → APIs**, enforce **Firebase AI Logic** (and later Cloud Firestore, once its chart shows almost all requests verified).
   Classic reCAPTCHA v3 keys can no longer be registered with App Check.
 
+## Batch upload from a template
+
+Transactions → **Batch upload** (or Setup → Import & export).
+
+1. **Download template (.xlsx)** builds an Excel file on your device with a Transactions sheet,
+   dropdowns filled from your own accounts, categories, currencies and goals (Lists sheet),
+   and an Instructions sheet with every column explained and worked examples.
+2. Fill one transaction per row (Excel, Numbers, Google Sheets or LibreOffice; CSV with the same headers also works).
+3. Upload it. Every row is checked before anything is saved: dates, types, amounts, currencies,
+   categories for the row's type, accounts, transfers, goals and likely duplicates.
+   Rows with problems show the reason next to each field and can be edited on screen.
+   Fixing a value offers to apply the same fix to other rows with the same mistake.
+4. **Download rows to fix** gives a CSV of the rows that still have problems (with a Problems column).
+   Fix it and upload it again; the extra columns are ignored.
+5. After importing, **Undo this import** removes everything from that upload.
+
+Files are read in the browser; only the rows you import are saved. Limits: 5 MB and 2,000 rows per file.
+
 ## How data is protected
 
 | Layer | What it does |
@@ -81,11 +99,11 @@ Rates are fetched automatically (at most every 12 hours) from [Frankfurter](http
 
 ```
 src/app/
-  core/       pure, framework-free logic + unit tests (models, FX, summaries, budgets, goals, recurring, guidance, CSV)
+  core/       pure, framework-free logic + unit tests (models, FX, summaries, budgets, goals, recurring, guidance, CSV, batch template validation, .xlsx reader)
   data/       Backend abstraction: FirebaseBackend, DemoBackend, RatesService
   state/      LedgerStore (NgRx Signal Store), UiState
   shared/     icons, charts, dialogs, toasts, export (CSV/PDF), actions
-  forms/      transaction, account, category, budget, goal, recurring, debt, onboarding, CSV import
+  forms/      transaction, account, category, budget, goal, recurring, debt, onboarding, CSV import, batch upload
   features/   one lazy-loaded page per route
   shell/      layout, navigation, sign-in
 ```

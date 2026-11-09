@@ -136,6 +136,19 @@ export const LedgerStore = signalStore(
         }
         return writeMonth(k);
       },
+      /** Removes every transaction from one CSV/batch import (used for "Undo this import"). */
+      deleteImport(importId: string) {
+        const months = { ...store.months() };
+        const touched: string[] = [];
+        let removed = 0;
+        for (const [k, items] of Object.entries(months)) {
+          const keep = items.filter((t) => t.importId !== importId);
+          if (keep.length !== items.length) { removed += items.length - keep.length; months[k] = keep; touched.push(k); }
+        }
+        if (!touched.length) return Promise.resolve(0);
+        patchState(store, { months });
+        return Promise.all(touched.map(writeMonth)).then(() => removed);
+      },
       saveReceipt(doc: ReceiptDoc) {
         const u = store.uid();
         if (!u) return Promise.resolve();
