@@ -37,7 +37,10 @@ export default class SignIn {
       const code = (e as { code?: string }).code ?? '';
       this.error.set(code === 'auth/unauthorized-domain'
         ? "This web address isn't allowed to sign in yet. Add it under Firebase Authentication → Settings → Authorized domains."
-        : code === 'auth/network-request-failed' ? 'No connection. Check your internet and try again.' : "Sign-in didn't complete. Please try again.");
+        : code === 'auth/network-request-failed' ? 'No connection. Check your internet and try again.'
+        : code === 'auth/operation-not-allowed' ? 'Google sign-in is switched off. Turn it on under Firebase Authentication → Sign-in method → Google.'
+        : `Sign-in didn't complete. Please try again. (${code || (e as Error)?.message || 'unknown error'})`);
+      console.error('Sign-in failed', e);
     } finally {
       this.busy.set(false);
     }
