@@ -123,6 +123,10 @@ describe('csv', () => {
     const rows = [['a', 'b,c', 'say "hi"'], ['1', '2', '3']];
     expect(parseCSV(toCSV(rows))).toEqual(rows);
   });
+  it('neutralizes spreadsheet formulas but keeps numbers', () => {
+    const csv = toCSV([['=HYPERLINK("http://evil","x")', '+cmd', '@SUM(A1)', '-12.50', '-x', 'Tesco', 1200]]);
+    expect(csv).toBe(`"'=HYPERLINK(""http://evil"",""x"")",'+cmd,'@SUM(A1),-12.50,'-x,Tesco,1200`);
+  });
   it('reads common bank date and amount formats', () => {
     expect(parseDate('03/11/2026', 'dmy')).toBe('2026-11-03');
     expect(parseDate('11/03/2026', 'mdy')).toBe('2026-11-03');

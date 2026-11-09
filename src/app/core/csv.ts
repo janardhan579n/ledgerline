@@ -2,8 +2,18 @@ import { round2, toNumber } from './currency';
 import { uid } from './defaults';
 import { Category, Transaction } from './models';
 
+/**
+ * Spreadsheets run a cell that starts with = + - @ (or tab / carriage return) as a formula.
+ * Text from scans, imports and notes could do that, so such text gets a leading apostrophe,
+ * which Excel, Numbers and Google Sheets show as plain text. Plain numbers like -12.50 are left alone.
+ */
+export function neutralizeFormula(s: string): string {
+  if (/^-?\d+(\.\d+)?$/.test(s)) return s;
+  return /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
+}
+
 export const csvCell = (v: unknown) => {
-  const s = v == null ? '' : String(v);
+  const s = neutralizeFormula(v == null ? '' : String(v));
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 };
 export const toCSV = (rows: unknown[][]) => rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
