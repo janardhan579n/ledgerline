@@ -21,7 +21,7 @@ export const firebaseConfig = {
  */
 export const aiConfig = {
   models: ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash'],
-  appCheckSiteKey: '',
+  appCheckSiteKey: '6LcFaxcuAAAAAM9n3Usu3bzbe4W72GYzM_IX6T9u',
 };
 
 /** Set to true to point the app at the local Firebase emulators (npm run emulators). */
