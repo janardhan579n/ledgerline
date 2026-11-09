@@ -27,11 +27,15 @@ With no Firebase config the app runs in **demo mode**: "Try the demo" signs you 
    ```
    Your app is live at `https://personal-ledger.web.app`. Open it on your phone and use *Add to Home Screen* to install it.
 
-### Optional: only allow specific people
+### Who can use it: the first 5 Google accounts
 
-By default anyone with a Google account can sign in. Each person still only ever sees their own data, but they would use your free quota. To restrict sign-in to you and your family, edit `isOwner()` in `firestore.rules` (the allow-list is already written there, commented out), then run `npm run deploy:rules`.
+The first 5 Google accounts to sign in each get a seat; the 6th and later see "all places are taken" and can't read or write anything.
+Each person only ever sees their own data. The owner (the email in `isAdmin()` in `firestore.rules`) always keeps access.
+The limit is enforced by the security rules (`members/{uid}` and `seats/1..5`), not just the app.
 
-Turning on two-step verification for your Google account protects the app too, since that's your login.
+To free a seat for someone else, open Firebase console → Firestore and delete both `members/{their uid}` and `seats/{n}` for that person.
+To change the number of seats, edit the `['1', '2', '3', '4', '5']` lists in `firestore.rules` and `SEATS` in `src/app/data/firebase-backend.ts`, then run `npm run deploy:rules`.
+Everyone shares the free AI scanning quota.
 
 ## Scanning receipts and payslips
 

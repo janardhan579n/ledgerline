@@ -6,14 +6,23 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Only these Google accounts can use the app. Add family members' Gmail addresses here,
-    // then run: npx firebase deploy --only firestore:rules
+    // Access: the first 5 Google accounts to sign in get a seat; the 6th and later are blocked.
+    // A seat is claimed by creating /seats/{1..5} and /members/{uid} together in one batch.
+    // Creating a seat that is already taken counts as an update, which is denied, so two
+    // people can never get the same seat. To free a seat, delete both documents in the
+    // Firebase console (Firestore → members/{uid} and seats/{n}).
+    function signedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    // The owner keeps access even if all seats are taken.
+    function isAdmin() {
+      return request.auth.token.email in ['janardhan579.n@gmail.com'];
+    }
+    function isMember() {
+      return exists(/databases/$(database)/documents/members/$(request.auth.uid));
+    }
     function isAllowed() {
-      return request.auth != null
-        && request.auth.token.email_verified == true
-        && request.auth.token.email in [
-          'janardhan579.n@gmail.com'
-        ];
+      return signedIn() && (isAdmin() || isMember());
     }
 
     function isOwner(uid) {
@@ -48,6 +57,27 @@ service cloud.firestore {
         && request.resource.data.mime in ['image/jpeg', 'application/pdf']
         && request.resource.data.data is string
         && request.resource.data.data.size() < 700000;
+    }
+
+    // One document per person with a seat. Readable only by that person; never changed by the app.
+    match /members/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['seat', 'email', 'joinedAt'])
+        && request.resource.data.seat in ['1', '2', '3', '4', '5']
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.joinedAt is string
+        && getAfter(/databases/$(database)/documents/seats/$(request.resource.data.seat)).data.uid == uid;
+    }
+
+    // Exactly five seats. Create-only, so a taken seat can't be overwritten.
+    match /seats/{seat} {
+      allow create: if signedIn()
+        && seat in ['1', '2', '3', '4', '5']
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid
+        && !exists(/databases/$(database)/documents/members/$(request.auth.uid))
+        && getAfter(/databases/$(database)/documents/members/$(request.auth.uid)).data.seat == seat;
     }
 
     match /{document=**} {

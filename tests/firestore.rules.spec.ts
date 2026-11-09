@@ -4,7 +4,7 @@
  */
 import { RulesTestEnvironment, assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import { readFileSync } from 'node:fs';
-import { deleteDoc, doc, getDoc, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { afterAll, beforeEach, describe, it } from 'vitest';
 
 let env: RulesTestEnvironment;
@@ -47,8 +47,48 @@ describe('a user\'s own data', () => {
   });
 });
 
+const person = (uid: string) => user(uid, { email: `${uid}@gmail.com`, email_verified: true });
+async function claim(uid: string, seat: string) {
+  const db = person(uid);
+  const b = writeBatch(db);
+  b.set(doc(db, 'seats', seat), { uid });
+  b.set(doc(db, 'members', uid), { seat, email: `${uid}@gmail.com`, joinedAt: '2026-11-09T00:00:00Z' });
+  return b.commit();
+}
+
+describe('five seats', () => {
+  it('lets the first five accounts in and blocks the sixth', async () => {
+    for (const [i, uid] of ['a', 'b', 'c', 'd', 'e'].entries()) await assertSucceeds(claim(uid, String(i + 1)));
+    for (const seat of ['1', '2', '3', '4', '5', '6']) await assertFails(claim('f', seat));
+    await assertSucceeds(setDoc(doc(person('e'), 'users/e/ledger/settings'), { primary: 'INR' }));
+    await assertFails(setDoc(doc(person('f'), 'users/f/ledger/settings'), { primary: 'INR' }));
+  });
+  it('never lets two people share a seat or one person take two', async () => {
+    await assertSucceeds(claim('a', '1'));
+    await assertFails(claim('b', '1'));
+    await assertFails(claim('a', '2'));
+  });
+  it('rejects a member record without its seat, or with someone else\'s email', async () => {
+    const db = person('x');
+    await assertFails(setDoc(doc(db, 'members', 'x'), { seat: '1', email: 'x@gmail.com', joinedAt: 'now' }));
+    const b = writeBatch(db);
+    b.set(doc(db, 'seats', '1'), { uid: 'x' });
+    b.set(doc(db, 'members', 'x'), { seat: '1', email: 'boss@gmail.com', joinedAt: 'now' });
+    await assertFails(b.commit());
+  });
+  it('lets people read only their own member record', async () => {
+    await assertSucceeds(claim('a', '1'));
+    await assertSucceeds(getDoc(doc(person('a'), 'members', 'a')));
+    await assertFails(getDoc(doc(person('b'), 'members', 'a')));
+  });
+  it('keeps the owner in even when all seats are taken', async () => {
+    for (const [i, uid] of ['a', 'b', 'c', 'd', 'e'].entries()) await assertSucceeds(claim(uid, String(i + 1)));
+    await assertSucceeds(setDoc(doc(user('owner'), 'users/owner/ledger/settings'), { primary: 'MYR' }));
+  });
+});
+
 describe('allow-list', () => {
-  it('refuses Google accounts that are not on the list, even for their own folder', async () => {
+  it('refuses Google accounts without a seat, even for their own folder', async () => {
     const stranger = user('mallory', { email: 'someone@gmail.com', email_verified: true });
     await assertFails(setDoc(doc(stranger, 'users/mallory/ledger/settings'), { primary: 'MYR' }));
     await assertFails(getDoc(doc(stranger, 'users/mallory/ledger/settings')));

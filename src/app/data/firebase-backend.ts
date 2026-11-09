@@ -6,7 +6,7 @@ import {
 } from 'firebase/auth';
 import {
   Firestore, clearIndexedDbPersistence, collection, getDoc, getDocFromServer, connectFirestoreEmulator, deleteDoc, doc, initializeFirestore, onSnapshot,
-  persistentLocalCache, persistentMultipleTabManager, setDoc, terminate,
+  persistentLocalCache, persistentMultipleTabManager, setDoc, terminate, writeBatch,
 } from 'firebase/firestore';
 import { AppCheck, ReCaptchaEnterpriseProvider, getToken, initializeAppCheck } from 'firebase/app-check';
 import { aiConfig, firebaseConfig, useEmulators } from '../../environments/firebase.config';
@@ -113,7 +113,47 @@ export class FirebaseBackend extends Backend {
     }
   }
 
+  /** Number of accounts that can use the app (must match the seats in firestore.rules). */
+  static readonly SEATS = 5;
+
+  /**
+   * Makes sure this account has one of the 5 seats, claiming the first free one on first sign-in.
+   * 'member' = has a seat, 'full' = all seats taken, 'unknown' = couldn't check (offline); the rules decide.
+   */
+  private async ensureSeat(uid: string): Promise<'member' | 'full' | 'unknown'> {
+    const email = this.auth.currentUser?.email ?? '';
+    const member = doc(this.db, 'members', uid);
+    try {
+      if ((await within(getDocFromServer(member), 15000, 'timeout')).exists()) return 'member';
+    } catch (e) {
+      if ((e as { code?: string }).code !== 'permission-denied') return 'unknown';
+    }
+    for (let n = 1; n <= FirebaseBackend.SEATS; n++) {
+      const b = writeBatch(this.db);
+      b.set(doc(this.db, 'seats', String(n)), { uid });
+      b.set(member, { seat: String(n), email, joinedAt: new Date().toISOString() });
+      try {
+        await within(b.commit(), 15000, 'timeout');
+        return 'member';
+      } catch (e) {
+        if ((e as { code?: string }).code !== 'permission-denied') return 'unknown'; // offline or slow: let the rules decide
+      }
+    }
+    return 'full';
+  }
+
   subscribe(uid: string, h: SubscribeHandlers): () => void {
+    let stopped = false;
+    let stop = () => {};
+    let seat: 'member' | 'full' | 'unknown' = 'unknown';
+    this.ensureSeat(uid).then((r) => {
+      seat = r;
+      if (!stopped) stop = this.listen(uid, h, () => seat);
+    });
+    return () => { stopped = true; stop(); };
+  }
+
+  private listen(uid: string, h: SubscribeHandlers, seat: () => string): () => void {
     const state: LedgerSnapshot = { settings: null, plan: null, market: null, months: {}, fromServer: false };
     let ledgerServer = false, monthsServer = false, ledgerSeen = false, monthsSeen = false;
     const emit = () => {
@@ -121,7 +161,9 @@ export class FirebaseBackend extends Backend {
       h.next({ ...state, months: { ...state.months }, fromServer: ledgerServer && monthsServer });
     };
     const fail = (e: { code?: string }) =>
-      h.error(e.code === 'permission-denied' ? `This Google account (${this.user()?.email ?? 'unknown'}) isn't allowed to use this app. Sign out and use an allowed account.` : 'Live updates stopped. Reload to reconnect.');
+      h.error(e.code !== 'permission-denied' ? 'Live updates stopped. Reload to reconnect.'
+        : seat() === 'full' ? `This app is limited to ${FirebaseBackend.SEATS} accounts and all of them are taken, so ${this.user()?.email ?? 'this account'} can't be added. Ask the owner to free a place.`
+        : `This Google account (${this.user()?.email ?? 'unknown'}) isn't allowed to use this app. Sign out and use an allowed account.`);
 
     const unLedger = onSnapshot(collection(this.db, 'users', uid, 'ledger'), { includeMetadataChanges: true }, (snap) => {
       state.settings = null; state.plan = null; state.market = null;
