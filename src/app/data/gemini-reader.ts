@@ -55,9 +55,11 @@ export class GeminiReader extends ReceiptReader {
   /** Index of the first model that worked, so later files skip unavailable ones. */
   private working = 0;
 
+  // AI Logic in this project rejects normal App Check tokens ("token is invalid") and accepts only
+  // limited-use tokens (replay protection). Each request then fetches its own short-lived token.
   private getModels(): GenerativeModel[] {
     if (!this.models) {
-      const ai = getAI(this.backend.app, { backend: new GoogleAIBackend() });
+      const ai = getAI(this.backend.app, { backend: new GoogleAIBackend(), useLimitedUseAppCheckTokens: true });
       this.models = aiConfig.models.map((model) =>
         getGenerativeModel(ai, { model, generationConfig: { responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA, temperature: 0 } }, { timeout: 60_000 }),
       );
@@ -67,7 +69,7 @@ export class GeminiReader extends ReceiptReader {
 
   /** Tiny request used by the connection check in Setup. */
   async ping(): Promise<{ ok: boolean; detail: string }> {
-    const ai = getAI(this.backend.app, { backend: new GoogleAIBackend() });
+    const ai = getAI(this.backend.app, { backend: new GoogleAIBackend(), useLimitedUseAppCheckTokens: true });
     const errors: string[] = [];
     for (const model of aiConfig.models) {
       const t0 = performance.now();
