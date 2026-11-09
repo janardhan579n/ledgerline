@@ -129,6 +129,14 @@ export interface EmiInfo {
   lender?: string;
   original?: number;
   tenure?: number;
+  /**
+   * Flat-rate loan (car hire purchase, many card instalment plans): the same interest every month,
+   * worked out on the original amount. Needs `original` and `tenure`. `Debt.apr` then holds the
+   * equivalent reducing-balance rate so loans can be compared.
+   */
+  flat?: boolean;
+  /** Flat rate as quoted by the lender, % a year (worked out when not given). */
+  flatRate?: number;
   accountId?: string;
   recurringId?: string;
 }

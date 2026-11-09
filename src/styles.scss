@@ -550,6 +550,8 @@ button.tile:hover { border-color: var(--accent); }
 }
 
 /* Loans & EMIs */
+.loan-warn { display: flex; gap: 8px; align-items: flex-start; margin: 4px 0; }
+.loan-warn .ico { flex: none; margin-top: 2px; }
 .loan-totals { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
 .loan-cur-h { margin: 0; font-size: 1rem; display: flex; align-items: baseline; gap: 8px; }
 .loan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }

@@ -66,7 +66,9 @@ and a prepayment what-if (one-time amount and/or extra each month; keep the EMI 
 and lower the EMI). Totals are kept separate per currency (for example INR loans and MYR loans), never mixed;
 only the EMIs-vs-income share converts to your main currency.
 
-Figures roll forward on their own as EMI dates pass. Optionally the EMI is added to scheduled payments
+Choose Flat rate for car hire purchase and card instalment plans quoted that way (same interest every month on the original amount;
+early settlement is estimated with the Rule of 78). The form warns when the numbers you enter don't fit together or give an
+unusually high rate. Figures roll forward on their own as EMI dates pass. Optionally the EMI is added to scheduled payments
 (it stops after the last EMI and can be recorded automatically as "Loan & card payments").
 Loan balances also feed the Guidance page. Calculations assume a fixed rate on a reducing balance.
 

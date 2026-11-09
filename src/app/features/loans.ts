@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { FormsModule } from '@angular/forms';
 import { formatMoney, toNumber } from '../core/currency';
 import { addMonths, dateLabel, monthLabel, todayISO } from '../core/dates';
-import { LoanStatus, addMonthsToDate, loanKindLabel, loanStatus, loanTotalsByCurrency, prepay, schedule, scheduleByYear } from '../core/loans';
+import { LoanStatus, addMonthsToDate, flatSettlement, loanKindLabel, loanSchedule, loanStatus, loanTotalsByCurrency, prepay, scheduleByYear } from '../core/loans';
 import { Debt } from '../core/models';
 import { Actions } from '../shared/actions.service';
 import { Progress } from '../shared/charts';
@@ -56,6 +56,10 @@ interface Prepay { lump: string; extra: string; mode: 'tenure' | 'emi' }
               <p><span class="pill good"><app-icon name="check" />Paid off</span> The last EMI was due {{ date(lastPaid(x)) }}. Delete it from Edit when you no longer need it.</p>
             } @else {
               <div class="goal-figs"><span class="big">{{ x.s.payable | money: x.d.currency }}</span><span class="muted">left to pay over {{ x.s.left }} EMI{{ x.s.left === 1 ? '' : 's' }}, until {{ month(x.s.lastDate!) }}</span></div>
+              @if (x.s.suspicious) {
+                <p class="banner warning small loan-warn"><app-icon name="alert" /><span>The interest rate these numbers give is too high for a normal loan, so one of them is probably off.
+                  @if (x.s.flat) {Check the EMI, the amount borrowed and the total number of EMIs.} @else {Check the EMIs left and the outstanding amount, or choose Flat rate if that's how your bank quotes it.} <button class="link-btn" (click)="actions.loan(x.d)">Check the numbers</button></span></p>
+              }
               @if (x.s.outstanding != null) {
                 <div class="split-bar" role="img" [attr.aria-label]="'Principal ' + money(x.s.outstanding, x.d.currency) + ', interest ' + money(x.s.interestLeft!, x.d.currency)">
                   <span [style.flex-grow]="x.s.outstanding" style="background: var(--s1)"></span><span [style.flex-grow]="x.s.interestLeft" style="background: var(--s2)"></span>
@@ -70,7 +74,7 @@ interface Prepay { lump: string; extra: string; mode: 'tenure' | 'emi' }
               <dl class="kv">
                 <div><dt>Monthly EMI</dt><dd>{{ x.s.emi | money: x.d.currency }}</dd></div>
                 <div><dt>Next EMI</dt><dd>{{ date(x.s.nextDate!) }}</dd></div>
-                <div><dt>Interest rate</dt><dd>{{ x.s.apr == null ? 'Not known' : rate(x.s.apr) + '% a year' }}@if (x.d.emi?.basis === 'outstanding' || x.d.emi?.basis === 'original') {<small class="muted"> worked out</small>}</dd></div>
+                <div><dt>Interest rate</dt><dd>@if (x.s.flat) {<span>{{ rate(x.s.flat.rate) }}% flat</span>@if (x.s.apr != null) {<small class="muted"> ≈ {{ rate(x.s.apr) }}% reducing</small>}} @else {<span>{{ x.s.apr == null ? 'Not known' : rate(x.s.apr) + '% a year' }}</span>@if (x.d.emi?.basis === 'outstanding' || x.d.emi?.basis === 'original') {<small class="muted"> worked out</small>}}</dd></div>
                 <div><dt>Next EMI split</dt><dd>@if (x.s.nextInterest != null) {{{ x.s.nextInterest | money: x.d.currency }} interest<br>{{ x.s.nextPrincipal | money: x.d.currency }} principal} @else {—}</dd></div>
               </dl>
               @if (x.s.life; as l) {
@@ -90,7 +94,15 @@ interface Prepay { lump: string; extra: string; mode: 'tenure' | 'emi' }
                   <button class="btn sm" [class.on]="panel()[x.d.id] === 'prepay'" (click)="toggle(x.d.id, 'prepay')" [attr.aria-expanded]="panel()[x.d.id] === 'prepay'">Prepayment what-if</button>
                   <button class="btn sm" [class.on]="panel()[x.d.id] === 'schedule'" (click)="toggle(x.d.id, 'schedule')" [attr.aria-expanded]="panel()[x.d.id] === 'schedule'">Repayment schedule</button>
                 </div>
-                @if (panel()[x.d.id] === 'prepay') {
+                @if (panel()[x.d.id] === 'prepay' && x.s.flat) {
+                  <div class="loan-panel">
+                    @if (settle(x); as st) {
+                      <p class="whatif">Settling in full now would cost about <b>{{ st.amount | money: x.d.currency }}</b> instead of {{ x.s.payable | money: x.d.currency }}, saving about <b>{{ st.rebate | money: x.d.currency }}</b> in interest.</p>
+                    }
+                    <p class="small muted">Flat-rate loans usually work out early settlement with the Rule of 78, which gives back less interest than is left on the schedule. Partial prepayments often don't lower the interest at all. Ask your bank for the exact settlement amount and any fee.</p>
+                  </div>
+                }
+                @if (panel()[x.d.id] === 'prepay' && !x.s.flat) {
                   <div class="loan-panel">
                     <div class="field-row">
                       <div class="field"><label [for]="'pl' + x.d.id">Pay once now</label><input [id]="'pl' + x.d.id" type="number" min="0" step="any" inputmode="decimal" [ngModel]="pp(x.d.id).lump" (ngModelChange)="setPp(x.d.id, { lump: $event })" placeholder="0"></div>
@@ -146,7 +158,7 @@ interface Prepay { lump: string; extra: string; mode: 'tenure' | 'emi' }
         </ul>
       </section>
     }
-    <p class="note small muted">Worked out on a reducing balance with a fixed rate and every EMI paid on its date. Floating-rate loans, fees, insurance added to the loan and missed EMIs make real figures differ. For understanding only, not financial advice.</p>
+    <p class="note small muted">Worked out with a fixed rate (reducing balance, or flat where you chose it) and every EMI paid on its date. Floating-rate loans, fees, insurance added to the loan and missed EMIs make real figures differ. For understanding only, not financial advice.</p>
   `,
 })
 export default class Loans {
@@ -196,7 +208,6 @@ export default class Loans {
     const p = this.pp(x.d.id);
     return prepay(x.s, toNumber(String(p.lump ?? '')), toNumber(String(p.extra ?? '')), p.mode, x.d.emi?.day);
   }
-  protected years(x: LoanView) {
-    return scheduleByYear(schedule(x.s.outstanding!, x.s.apr!, x.s.emi, x.s.nextDate!, x.d.emi?.day));
-  }
+  protected years(x: LoanView) { return scheduleByYear(loanSchedule(x.d, x.s)); }
+  protected settle(x: LoanView) { return flatSettlement(x.s, x.d.emi?.tenure ?? 0); }
 }

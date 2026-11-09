@@ -93,6 +93,20 @@ export interface LoanStatus {
   /** Share of the remaining payments that is interest (0..1). */
   interestShare: number | null;
   life: LoanLife | null;
+  /** Flat-rate loans: interest and principal in every EMI, and the flat rate. */
+  flat: { interest: number; principal: number; rate: number } | null;
+  /** True when the rate is too high for a normal loan, which usually means a number was mistyped. */
+  suspicious: boolean;
+}
+
+/** Reducing-balance rates above this are flagged as "check the numbers". */
+export const SUSPICIOUS_APR = 36;
+
+/** Flat-rate split from the original amount, tenure and EMI. */
+export function flatSplit(original: number, tenure: number, emi: number) {
+  const principal = original / tenure;
+  const interest = emi - principal;
+  return { principal, interest, rate: (interest * 12 * 100) / original };
 }
 export interface LoanLife {
   original: number;
@@ -112,10 +126,35 @@ export function loanStatus(d: Debt, today = todayISO()): LoanStatus | null {
   const emi = Number(e.amount) || 0;
   const paidSinceUpdate = Math.min(e.monthsLeft, emisDueSince(e.nextDate, today, e.day));
   const left = Math.max(0, e.monthsLeft - paidSinceUpdate);
+  const base = {
+    emi, paidSinceUpdate, left, done: left === 0,
+    nextDate: left ? addMonthsToDate(e.nextDate, paidSinceUpdate, e.day) : null,
+    lastDate: left ? addMonthsToDate(e.nextDate, e.monthsLeft - 1, e.day) : null,
+    payable: round2(emi * left),
+  };
+
+  if (e.flat && e.original && e.tenure && e.tenure >= left) {
+    const f = flatSplit(e.original, e.tenure, emi);
+    const emisPaid = e.tenure - left;
+    const interestLeft = round2(Math.max(0, f.interest) * left);
+    const apr = d.apr == null || Number.isNaN(Number(d.apr)) ? null : Number(d.apr);
+    return {
+      ...base, apr,
+      outstanding: round2(f.principal * left), interestLeft,
+      nextInterest: left ? round2(f.interest) : null, nextPrincipal: left ? round2(f.principal) : null,
+      interestShare: base.payable ? interestLeft / base.payable : null,
+      life: {
+        original: e.original, tenure: e.tenure, emisPaid, progress: emisPaid / e.tenure, totalPaid: round2(emi * emisPaid),
+        principalRepaid: round2(f.principal * emisPaid), interestPaid: round2(Math.max(0, f.interest) * emisPaid), totalInterest: round2(Math.max(0, f.interest) * e.tenure),
+      },
+      flat: { interest: round2(f.interest), principal: round2(f.principal), rate: e.flatRate ?? Math.round(f.rate * 100) / 100 },
+      suspicious: f.interest < -0.01 || f.rate > SUSPICIOUS_APR / 2,
+    };
+  }
+
   const apr = e.basis === 'none' || d.apr == null || Number.isNaN(Number(d.apr)) ? null : Number(d.apr);
   const outstanding = apr == null ? null : round2(presentValue(emi, left, apr));
-  const payable = round2(emi * left);
-  const interestLeft = outstanding == null ? null : round2(Math.max(0, payable - outstanding));
+  const interestLeft = outstanding == null ? null : round2(Math.max(0, base.payable - outstanding));
   const nextInterest = outstanding == null || !left ? null : round2(outstanding * monthly(apr!));
   let life: LoanLife | null = null;
   if (e.original && e.tenure && outstanding != null && e.tenure >= left) {
@@ -131,14 +170,47 @@ export function loanStatus(d: Debt, today = todayISO()): LoanStatus | null {
     }
   }
   return {
-    emi, paidSinceUpdate, left, done: left === 0,
-    nextDate: left ? addMonthsToDate(e.nextDate, paidSinceUpdate, e.day) : null,
-    lastDate: left ? addMonthsToDate(e.nextDate, e.monthsLeft - 1, e.day) : null,
-    payable, outstanding, interestLeft, apr,
+    ...base, outstanding, interestLeft, apr,
     nextInterest, nextPrincipal: nextInterest == null ? null : round2(Math.min(emi, outstanding!) - nextInterest),
-    interestShare: interestLeft == null || !payable ? null : interestLeft / payable,
-    life,
+    interestShare: interestLeft == null || !base.payable ? null : interestLeft / base.payable,
+    life, flat: null, suspicious: apr != null && apr > SUSPICIOUS_APR,
   };
+}
+
+/** Remaining EMIs month by month, for either kind of loan. */
+export function loanSchedule(d: Debt, s: LoanStatus): ScheduleRow[] {
+  if (!s.nextDate || s.outstanding == null) return [];
+  if (s.flat) {
+    let bal = s.outstanding;
+    return Array.from({ length: s.left }, (_, i) => {
+      bal = Math.max(0, bal - s.flat!.principal);
+      return { n: i + 1, date: addMonthsToDate(s.nextDate!, i, d.emi?.day), emi: s.emi, interest: s.flat!.interest, principal: s.flat!.principal, balance: round2(i === s.left - 1 ? 0 : bal) };
+    });
+  }
+  return s.apr == null ? [] : schedule(s.outstanding, s.apr, s.emi, s.nextDate, d.emi?.day);
+}
+
+/**
+ * Settling a flat-rate loan in full now, using the Rule of 78 that Malaysian hire-purchase and many
+ * instalment plans use: the interest rebate is total interest × k(k+1) / n(n+1), k = EMIs left.
+ */
+export function flatSettlement(s: LoanStatus, tenure: number): { amount: number; rebate: number } | null {
+  if (!s.flat || !s.left || !tenure) return null;
+  const total = Math.max(0, s.flat.interest) * tenure;
+  const rebate = round2((total * s.left * (s.left + 1)) / (tenure * (tenure + 1)));
+  return { amount: round2(s.payable - rebate), rebate };
+}
+
+/**
+ * When the outstanding amount and the original loan + tenure are both given, they should imply about
+ * the same rate. Returns both rates when they clearly disagree.
+ */
+export function rateConflict(i: LoanInput): { fromOutstanding: number; fromOriginal: number } | null {
+  if (!(i.outstanding! > 0) || !(i.original! > 0) || !(i.tenure! > 0) || i.monthsLeft > i.tenure!) return null;
+  const a = solveRate(i.outstanding!, i.emi, i.monthsLeft);
+  const b = solveRate(i.original!, i.emi, i.tenure!);
+  if (a == null || b == null) return null;
+  return Math.abs(a - b) > Math.max(1, 0.15 * Math.min(a, b)) ? { fromOutstanding: a, fromOriginal: b } : null;
 }
 
 /** What a debt counts as today, in its own currency: principal for loans when known, otherwise what's left to pay. */
@@ -220,11 +292,19 @@ export interface LoanInput {
   outstanding?: number;
   original?: number;
   tenure?: number;
+  flat?: boolean;
 }
 /** Works out the interest rate from whatever the person knows. Returns a message when the numbers don't fit. */
-export function resolveRate(i: LoanInput): { apr: number | null; error?: string } {
+export function resolveRate(i: LoanInput): { apr: number | null; flatRate?: number; error?: string } {
   if (!(i.emi > 0)) return { apr: null, error: 'Enter the monthly EMI.' };
   if (!(i.monthsLeft > 0)) return { apr: null, error: 'Enter how many EMIs are left.' };
+  if (i.flat) {
+    if (!(i.original! > 0) || !(i.tenure! > 0)) return { apr: null, error: 'Flat-rate loans need the original amount and the total number of EMIs.' };
+    if (i.monthsLeft > i.tenure!) return { apr: null, error: "EMIs left can't be more than the total number of EMIs." };
+    if (i.emi * i.tenure! < i.original! - 0.5) return { apr: null, error: `${i.tenure} EMIs of ${i.emi} add up to less than the ${i.original} borrowed. Check the numbers.` };
+    const f = flatSplit(i.original!, i.tenure!, i.emi);
+    return { apr: solveRate(i.original!, i.emi, i.tenure!) ?? 0, flatRate: Math.round(f.rate * 100) / 100 };
+  }
   switch (i.basis) {
     case 'rate':
       if (i.apr == null || !(i.apr >= 0) || i.apr > 120) return { apr: null, error: 'Enter the interest rate, e.g. 8.5.' };

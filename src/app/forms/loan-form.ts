@@ -4,7 +4,7 @@ import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { formatMoney, round2, toNumber } from '../core/currency';
 import { dateLabel, todayISO } from '../core/dates';
 import { uid } from '../core/defaults';
-import { LOAN_KINDS, LoanBasis, addMonthsToDate, loanStatus, mainLoanCurrency, nextDueDate, presentValue, resolveRate } from '../core/loans';
+import { LOAN_KINDS, LoanBasis, SUSPICIOUS_APR, addMonthsToDate, flatSplit, loanStatus, mainLoanCurrency, nextDueDate, presentValue, rateConflict, resolveRate } from '../core/loans';
 import { Debt, EmiInfo, Recurring } from '../core/models';
 import { confirmAction } from '../shared/confirm-dialog';
 import { DialogService } from '../shared/dialog.service';
@@ -35,29 +35,38 @@ const BASES: ReadonlyArray<[LoanBasis, string]> = [['rate', 'Interest rate'], ['
           <div class="field"><label for="lf-left">EMIs left</label><input id="lf-left" formControlName="monthsLeft" type="number" min="1" max="600" inputmode="numeric" class="short-input">
             <small>Count the next one, due {{ nextLabel() }}.@if (preview().last) { The last EMI would be {{ preview().last }}.}</small></div>
 
-          <div class="field"><span class="lbl">What else do you know about it?</span>
-            <div class="seg small" role="radiogroup" aria-label="What you know">
-              @for (b of bases; track b[0]) {<button type="button" role="radio" [attr.aria-checked]="basis() === b[0]" (click)="setBasis(b[0])">{{ b[1] }}</button>}
+          <div class="field"><span class="lbl">How is interest charged?</span>
+            <div class="seg small" role="radiogroup" aria-label="Interest type">
+              <button type="button" role="radio" [attr.aria-checked]="!flat()" (click)="setFlat(false)">Reducing balance</button>
+              <button type="button" role="radio" [attr.aria-checked]="flat()" (click)="setFlat(true)">Flat rate</button>
             </div>
+            <small>{{ flat() ? 'Same interest every month, worked out on the original amount. Common for car hire purchase and credit card instalment plans in Malaysia.' : 'Interest on what you still owe, so it shrinks each month. Most home, personal and education loans.' }}</small>
           </div>
-          @switch (basis()) {
-            @case ('rate') {
-              <div class="field"><label for="lf-apr">Interest rate</label><div class="input-unit short"><input id="lf-apr" formControlName="apr" type="number" step="any" min="0" inputmode="decimal"><span>% a year</span></div>
-                <small>From your sanction letter or loan statement. For floating-rate loans, use today's rate.</small></div>
-            }
-            @case ('outstanding') {
-              <div class="field"><label for="lf-out">Principal outstanding now</label><input id="lf-out" formControlName="outstanding" type="number" step="any" min="0" inputmode="decimal" class="short-input">
-                <small>From your latest loan statement or banking app, after the last EMI. The interest rate is worked out from this.</small></div>
-            }
-            @case ('original') {
-              <p class="small muted">The interest rate is worked out from the original amount, the EMI and the total number of EMIs.</p>
-            }
-            @default {
-              <p class="small muted">You'll see the total still to pay. Add the rate or outstanding amount later to see how much of it is interest.</p>
+          @if (!flat()) {
+            <div class="field"><span class="lbl">What else do you know about it?</span>
+              <div class="seg small" role="radiogroup" aria-label="What you know">
+                @for (b of bases; track b[0]) {<button type="button" role="radio" [attr.aria-checked]="basis() === b[0]" (click)="setBasis(b[0])">{{ b[1] }}</button>}
+              </div>
+            </div>
+            @switch (basis()) {
+              @case ('rate') {
+                <div class="field"><label for="lf-apr">Interest rate</label><div class="input-unit short"><input id="lf-apr" formControlName="apr" type="number" step="any" min="0" inputmode="decimal"><span>% a year</span></div>
+                  <small>From your sanction letter or loan statement. For floating-rate loans, use today's rate.</small></div>
+              }
+              @case ('outstanding') {
+                <div class="field"><label for="lf-out">Principal outstanding now</label><input id="lf-out" formControlName="outstanding" type="number" step="any" min="0" inputmode="decimal" class="short-input">
+                  <small>Principal only, after the last EMI, from your loan statement. Not the total of the EMIs left. The interest rate is worked out from this.</small></div>
+              }
+              @case ('original') {
+                <p class="small muted">The interest rate is worked out from the original amount, the EMI and the total number of EMIs.</p>
+              }
+              @default {
+                <p class="small muted">You'll see the total still to pay. Add the rate or outstanding amount later to see how much of it is interest.</p>
+              }
             }
           }
-          <details class="adv" [open]="basis() === 'original' || hasLife()">
-            <summary>{{ basis() === 'original' ? 'Original loan' : 'Original loan (optional, for progress and interest paid so far)' }}</summary>
+          <details class="adv" [open]="needsOriginal() || hasLife()">
+            <summary>{{ needsOriginal() ? 'Original loan' : 'Original loan (optional, for progress and interest paid so far)' }}</summary>
             <div class="field-row">
               <div class="field"><label for="lf-orig">Loan amount taken</label><input id="lf-orig" formControlName="original" type="number" step="any" min="0" inputmode="decimal"></div>
               <div class="field"><label for="lf-ten">Total EMIs (tenure)</label><div class="input-unit"><input id="lf-ten" formControlName="tenure" type="number" min="1" max="600" inputmode="numeric"><span>months</span></div></div>
@@ -73,6 +82,7 @@ const BASES: ReadonlyArray<[LoanBasis, string]> = [['rate', 'Interest rate'], ['
                 <div><dt>Interest still to pay</dt><dd>{{ p.interest ?? '—' }}</dd></div>
                 <div><dt>Interest rate</dt><dd>{{ p.rate ?? '—' }}</dd></div>
               </dl>
+              @for (w of p.warnings ?? []; track w) {<p class="banner warning small loan-warn" role="alert">{{ w }}</p>}
             }
           }
 
@@ -104,6 +114,8 @@ export class LoanForm implements OnInit {
   protected readonly isNew = computed(() => !this.debt());
   protected readonly error = signal('');
   protected readonly basis = signal<LoanBasis>('rate');
+  protected readonly flat = signal(false);
+  protected readonly needsOriginal = computed(() => this.flat() || this.basis() === 'original');
   protected readonly kinds = LOAN_KINDS;
   protected readonly bases = BASES;
   protected readonly currencies = computed(() => currencyChoices(this.store.settingsView()));
@@ -126,21 +138,34 @@ export class LoanForm implements OnInit {
     return {
       emi: toNumber(v.emi ?? ''), monthsLeft: Math.round(toNumber(v.monthsLeft ?? '')), basis: this.basis(),
       apr: v.apr === '' ? undefined : toNumber(v.apr ?? ''), outstanding: toNumber(v.outstanding ?? ''), original: toNumber(v.original ?? ''), tenure: Math.round(toNumber(v.tenure ?? '')),
+      flat: this.flat(),
     };
   });
   protected readonly preview = computed(() => {
     const i = this.input();
     const cur = this.value().currency ?? 'MYR';
+    const m = (v: number) => formatMoney(v, cur);
     if (!(i.emi > 0) || !(i.monthsLeft > 0)) return { payable: '', last: '' } as Preview;
     const last = dateLabel(addMonthsToDate(this.nextDate(), i.monthsLeft - 1, this.day()), true);
-    const { apr, error } = resolveRate(i);
-    if (error && i.basis !== 'none') return { payable: '', last, error };
+    const { apr, flatRate, error } = resolveRate(i);
+    if (error && (i.flat || i.basis !== 'none')) return { payable: '', last, error };
     const payable = i.emi * i.monthsLeft;
-    const out = apr == null ? null : presentValue(i.emi, i.monthsLeft, apr);
+    const warnings: string[] = [];
+    let out: number | null = null, rate: string | null = null;
+    if (i.flat) {
+      const f = flatSplit(i.original, i.tenure, i.emi);
+      out = f.principal * i.monthsLeft;
+      rate = `${flatRate}% flat (about ${+(apr ?? 0).toFixed(2)}% a year on a reducing balance)`;
+      if (f.rate > SUSPICIOUS_APR / 2) warnings.push(`A ${flatRate}% flat rate is unusually high. Check the EMI, the amount borrowed and the total number of EMIs.`);
+    } else {
+      out = apr == null ? null : presentValue(i.emi, i.monthsLeft, apr);
+      rate = apr == null ? null : `${+apr.toFixed(2)}% a year${i.basis === 'rate' ? '' : ' (worked out)'}`;
+      const c = i.basis === 'outstanding' ? rateConflict(i) : null;
+      if (c) warnings.push(`These numbers don't agree: the outstanding amount means ${+c.fromOutstanding.toFixed(1)}% a year, but the original loan and tenure mean ${+c.fromOriginal.toFixed(1)}%. One of them is probably off. Check the outstanding principal (not the total of the EMIs left) and the number of EMIs left on your statement.`);
+      else if (apr != null && apr > SUSPICIOUS_APR) warnings.push(`${+apr.toFixed(1)}% a year is unusually high for a loan, so a number is probably off. If your bank quotes a flat rate, choose Flat rate. A 0% instalment plan should use an interest rate of 0.`);
+    }
     return {
-      last, payable: formatMoney(payable, cur), outstanding: out == null ? null : formatMoney(out, cur),
-      interest: out == null ? null : formatMoney(payable - out, cur),
-      rate: apr == null ? null : `${+apr.toFixed(2)}% a year${i.basis === 'rate' ? '' : ' (worked out)'}`,
+      last, payable: m(payable), outstanding: out == null ? null : m(out), interest: out == null ? null : m(Math.max(0, payable - out)), rate, warnings,
     } as Preview;
   });
 
@@ -157,6 +182,7 @@ export class LoanForm implements OnInit {
     const s = loanStatus(d, this.today)!;
     const rec = this.store.planView().recurring.find((r) => r.id === e.recurringId);
     this.basis.set(e.basis);
+    this.flat.set(!!e.flat);
     this.form.setValue({
       name: d.name, kind: e.kind ?? 'other', lender: e.lender ?? '', emi: String(e.amount), currency: d.currency, day: String(e.day),
       monthsLeft: String(s.left || ''), apr: e.basis === 'none' ? '' : String(+(+d.apr).toFixed(3)),
@@ -175,6 +201,11 @@ export class LoanForm implements OnInit {
   }
 
   protected setBasis(b: LoanBasis) { this.basis.set(b); this.error.set(''); }
+  protected setFlat(on: boolean) {
+    this.flat.set(on);
+    this.error.set('');
+    if (!on && this.basis() === 'original' && !this.form.controls.original.value) this.basis.set('rate');
+  }
 
   protected save() {
     const v = this.form.getRawValue();
@@ -182,7 +213,7 @@ export class LoanForm implements OnInit {
     if (!v.name.trim()) return this.error.set('Name the loan.');
     if (!(i.emi > 0)) return this.error.set('Enter the monthly EMI.');
     if (!(i.monthsLeft > 0) || i.monthsLeft > 600) return this.error.set('Enter how many EMIs are left (1 to 600).');
-    const { apr, error } = resolveRate(i);
+    const { apr, flatRate, error } = resolveRate(i);
     if (error) return this.error.set(error);
     if (v.schedule && !v.accountId) return this.error.set('Choose the account the EMI is paid from.');
 
@@ -193,14 +224,16 @@ export class LoanForm implements OnInit {
     const lastDate = addMonthsToDate(nextDate, i.monthsLeft - 1, day);
     const recurringId = v.schedule ? prev?.emi?.recurringId ?? uid() : undefined;
     const emi: EmiInfo = {
-      amount: round2(i.emi), monthsLeft: i.monthsLeft, nextDate, day, basis: this.basis(), kind: v.kind as EmiInfo['kind'],
+      amount: round2(i.emi), monthsLeft: i.monthsLeft, nextDate, day, basis: i.flat ? 'original' : this.basis(), kind: v.kind as EmiInfo['kind'],
+      ...(i.flat ? { flat: true, flatRate } : {}),
       ...(v.lender.trim() ? { lender: v.lender.trim() } : {}),
       ...(i.original > 0 && i.tenure > 0 ? { original: round2(i.original), tenure: i.tenure } : {}),
       ...(v.schedule ? { accountId: v.accountId, recurringId } : {}),
     };
     const debt: Debt = {
       id, name: v.name.trim(), currency: v.currency, minPayment: emi.amount, emi,
-      apr: apr ?? 0, balance: round2(apr == null ? i.emi * i.monthsLeft : presentValue(i.emi, i.monthsLeft, apr)),
+      apr: apr ?? 0,
+      balance: round2(i.flat ? (i.original / i.tenure) * i.monthsLeft : apr == null ? i.emi * i.monthsLeft : presentValue(i.emi, i.monthsLeft, apr)),
     };
     const s = this.store.settingsView();
     const cat = s.categories.find((c) => c.kind === 'expense' && /loan/i.test(c.name)) ?? s.categories.find((c) => c.kind === 'expense' && /^other/i.test(c.name));
@@ -232,4 +265,4 @@ export class LoanForm implements OnInit {
   }
 }
 
-interface Preview { payable: string; last: string; outstanding?: string | null; interest?: string | null; rate?: string | null; error?: string }
+interface Preview { payable: string; last: string; outstanding?: string | null; interest?: string | null; rate?: string | null; error?: string; warnings?: string[] }

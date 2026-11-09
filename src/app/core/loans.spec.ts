@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Debt } from './models';
-import { loanTotals, loanTotalsByCurrency, mainLoanCurrency } from './loans';
+import { flatSettlement, loanSchedule, loanTotals, loanTotalsByCurrency, mainLoanCurrency, rateConflict } from './loans';
 import { addMonthsToDate, debtBalanceNow, emiFor, emisDueSince, loanStatus, nextDueDate, prepay, presentValue, resolveRate, schedule, scheduleByYear, solveRate } from './loans';
 
 const loan = (over: Partial<Debt['emi']> = {}, apr = 9): Debt => ({
@@ -136,5 +136,50 @@ describe('totals per currency', () => {
     expect(g.map((x) => x.currency)).toEqual(['INR', 'MYR']);
     expect(g[0]).toMatchObject({ payable: 3_000_000, emi: 25_000, count: 1, unconverted: 0 });
     expect(g[1]).toMatchObject({ payable: 48_000, emi: 1200, count: 1 });
+  });
+});
+
+describe('flat-rate loans', () => {
+  // Car hire purchase: RM 60,000 over 60 months at 3% flat → interest RM 150 a month, EMI RM 1,150
+  const car: Debt = { id: 'hp', name: 'Car', currency: 'MYR', apr: 5.6, minPayment: 1150, balance: 0,
+    emi: { amount: 1150, monthsLeft: 40, nextDate: '2026-12-15', day: 15, basis: 'original', flat: true, original: 60_000, tenure: 60 } };
+  it('charges the same interest every month on the original amount', () => {
+    const s = loanStatus(car, '2026-11-09')!;
+    expect(s.flat).toMatchObject({ interest: 150, principal: 1000, rate: 3 });
+    expect(s.outstanding).toBe(40_000);
+    expect(s.interestLeft).toBe(6000);
+    expect(s.payable).toBe(46_000);
+    expect(s.life).toMatchObject({ emisPaid: 20, principalRepaid: 20_000, interestPaid: 3000, totalInterest: 9000 });
+    expect(s.suspicious).toBe(false);
+    const rows = loanSchedule(car, s);
+    expect(rows.length).toBe(40);
+    expect(rows[0]).toMatchObject({ interest: 150, principal: 1000, balance: 39_000 });
+    expect(rows.at(-1)!.balance).toBe(0);
+  });
+  it('estimates early settlement with the Rule of 78', () => {
+    const s = loanStatus(car, '2026-11-09')!;
+    const r = flatSettlement(s, 60)!;
+    expect(r.rebate).toBeCloseTo((9000 * 40 * 41) / (60 * 61), 1);
+    expect(r.amount).toBeCloseTo(46_000 - r.rebate, 1);
+  });
+  it('works out the flat rate and an equivalent reducing rate', () => {
+    const r = resolveRate({ emi: 1150, monthsLeft: 40, basis: 'original', flat: true, original: 60_000, tenure: 60 });
+    expect(r.flatRate).toBe(3);
+    expect(r.apr).toBeCloseTo(5.6, 0);
+    expect(resolveRate({ emi: 900, monthsLeft: 40, basis: 'original', flat: true, original: 60_000, tenure: 60 }).error).toBeTruthy();
+  });
+});
+
+describe('numbers that do not fit', () => {
+  it('flags an outstanding amount that disagrees with the original loan and tenure', () => {
+    // RM 26,652.13 over 12 EMIs of RM 2,935.45, 8 left, outstanding typed as RM 16,831.16
+    const c = rateConflict({ emi: 2935.45, monthsLeft: 8, basis: 'outstanding', outstanding: 16_831.16, original: 26_652.13, tenure: 12 })!;
+    expect(c.fromOutstanding).toBeGreaterThan(90);
+    expect(c.fromOriginal).toBeCloseTo(54.9, 0);
+    expect(rateConflict({ emi: 17_994.52, monthsLeft: 180, basis: 'outstanding', outstanding: presentValue(17_994.52, 180, 9), original: 2_000_000, tenure: 240 })).toBeNull();
+  });
+  it('marks very high rates as suspicious', () => {
+    expect(loanStatus(loan({}, 96.7), '2026-11-09')!.suspicious).toBe(true);
+    expect(loanStatus(loan({}, 9), '2026-11-09')!.suspicious).toBe(false);
   });
 });
