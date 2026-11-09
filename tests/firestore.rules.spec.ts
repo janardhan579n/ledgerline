@@ -18,7 +18,7 @@ beforeEach(async () => {
 });
 afterAll(async () => env?.cleanup());
 
-const ALLOWED = { email: 'janardhan579n@gmail.com', email_verified: true };
+const ALLOWED = { email: 'janardhan579.n@gmail.com', email_verified: true };
 const user = (uid: string, token: Record<string, unknown> = ALLOWED) => env.authenticatedContext(uid, token).firestore();
 
 const month = { month: '2026-10', items: [{ id: 't1', amount: 10 }] };
@@ -54,7 +54,7 @@ describe('allow-list', () => {
     await assertFails(getDoc(doc(stranger, 'users/mallory/ledger/settings')));
   });
   it('refuses unverified emails', async () => {
-    const unverified = user('eve', { email: 'janardhan579n@gmail.com', email_verified: false });
+    const unverified = user('eve', { email: 'janardhan579.n@gmail.com', email_verified: false });
     await assertFails(setDoc(doc(unverified, 'users/eve/ledger/settings'), { primary: 'MYR' }));
   });
 });
