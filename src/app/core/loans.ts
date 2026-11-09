@@ -246,3 +246,44 @@ export function resolveRate(i: LoanInput): { apr: number | null; error?: string 
       return { apr: null };
   }
 }
+
+/** The currency most loans are in (ties go to the larger amount still to pay), else `fallback`. */
+export function mainLoanCurrency(debts: Debt[], fallback: string, today = todayISO()): string {
+  const score: Record<string, [number, number]> = {};
+  for (const d of debts) {
+    const s = loanStatus(d, today);
+    if (!s || s.done) continue;
+    const x = (score[d.currency] ??= [0, 0]);
+    x[0]++;
+    x[1] += s.payable;
+  }
+  const best = Object.entries(score).sort((a, b) => b[1][0] - a[1][0] || b[1][1] - a[1][1])[0];
+  return best?.[0] ?? fallback;
+}
+
+export interface LoanTotals { currency: string; payable: number; principal: number; interest: number; emi: number; unknown: number; unconverted: number; count: number }
+/** Adds up active loans in one currency. `convert` returns null when there's no rate. */
+export function loanTotals(debts: Debt[], to: string, convert: (v: number, from: string, to: string) => number | null, today = todayISO()): LoanTotals {
+  const t: LoanTotals = { currency: to, payable: 0, principal: 0, interest: 0, emi: 0, unknown: 0, unconverted: 0, count: 0 };
+  for (const d of debts) {
+    const s = loanStatus(d, today);
+    if (!s || s.done) continue;
+    const c = (v: number) => (d.currency === to ? v : convert(v, d.currency, to));
+    const pay = c(s.payable);
+    if (pay == null) { t.unconverted++; continue; }
+    t.count++;
+    t.payable += pay;
+    t.emi += c(s.emi) ?? 0;
+    if (s.outstanding == null) t.unknown++;
+    else { t.principal += c(s.outstanding) ?? 0; t.interest += c(s.interestLeft ?? 0) ?? 0; }
+  }
+  return t;
+}
+
+/** One set of totals per loan currency, never converted (e.g. INR loans and MYR loans side by side). */
+export function loanTotalsByCurrency(debts: Debt[], today = todayISO()): LoanTotals[] {
+  const curs = [...new Set(debts.filter((d) => { const s = loanStatus(d, today); return s && !s.done; }).map((d) => d.currency))];
+  return curs
+    .map((c) => loanTotals(debts.filter((d) => d.currency === c), c, () => null, today))
+    .sort((a, b) => b.count - a.count || a.currency.localeCompare(b.currency));
+}

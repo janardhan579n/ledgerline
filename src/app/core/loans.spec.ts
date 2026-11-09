@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Debt } from './models';
+import { loanTotals, loanTotalsByCurrency, mainLoanCurrency } from './loans';
 import { addMonthsToDate, debtBalanceNow, emiFor, emisDueSince, loanStatus, nextDueDate, prepay, presentValue, resolveRate, schedule, scheduleByYear, solveRate } from './loans';
 
 const loan = (over: Partial<Debt['emi']> = {}, apr = 9): Debt => ({
@@ -104,5 +105,36 @@ describe('resolveRate', () => {
     expect(resolveRate({ emi: 1000, monthsLeft: 10, basis: 'none' })).toEqual({ apr: null });
     expect(resolveRate({ emi: 1000, monthsLeft: 10, basis: 'outstanding', outstanding: 50_000 }).error).toBeTruthy();
     expect(resolveRate({ emi: 0, monthsLeft: 10, basis: 'none' }).error).toBeTruthy();
+  });
+});
+
+describe('totals across currencies', () => {
+  const inr1 = loan();
+  const inr2 = { ...loan({ amount: 10_000, monthsLeft: 12 }), id: 'l2' };
+  const myr = { ...loan({ amount: 1000, monthsLeft: 10, basis: 'none' }, 0), id: 'l3', currency: 'MYR' };
+  it('picks the currency most loans use', () => {
+    expect(mainLoanCurrency([inr1, inr2, myr], 'MYR', '2026-11-09')).toBe('INR');
+    expect(mainLoanCurrency([], 'MYR')).toBe('MYR');
+  });
+  it('adds loans up in the chosen currency, converting the others', () => {
+    const conv = (v: number, from: string, to: string) => (from === 'MYR' && to === 'INR' ? v * 20 : null);
+    const t = loanTotals([inr1, inr2, myr], 'INR', conv, '2026-11-09');
+    expect(t.payable).toBeCloseTo(3_000_000 + 120_000 + 10_000 * 20, 2);
+    expect(t.emi).toBe(25_000 + 10_000 + 20_000);
+    expect(t.unknown).toBe(1);
+    const noRate = loanTotals([inr1, myr], 'INR', () => null, '2026-11-09');
+    expect(noRate.unconverted).toBe(1);
+    expect(noRate.payable).toBe(3_000_000);
+  });
+});
+
+describe('totals per currency', () => {
+  it('keeps INR and MYR loans apart', () => {
+    const inr = loan();
+    const myr = { ...loan({ amount: 1200, monthsLeft: 40 }, 7), id: 'm', currency: 'MYR' };
+    const g = loanTotalsByCurrency([inr, myr], '2026-11-09');
+    expect(g.map((x) => x.currency)).toEqual(['INR', 'MYR']);
+    expect(g[0]).toMatchObject({ payable: 3_000_000, emi: 25_000, count: 1, unconverted: 0 });
+    expect(g[1]).toMatchObject({ payable: 48_000, emi: 1200, count: 1 });
   });
 });

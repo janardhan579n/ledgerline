@@ -59,7 +59,8 @@ or the original amount and tenure (the rate is worked out). Without any of them 
 For each loan: total still to pay, principal vs interest, next EMI and its interest/principal split, last EMI date,
 progress and interest paid so far (when the original amount and tenure are known), a year-by-year repayment schedule,
 and a prepayment what-if (one-time amount and/or extra each month; keep the EMI and finish sooner, or keep the end date
-and lower the EMI). The page totals all loans in your main currency and compares monthly EMIs with your average income.
+and lower the EMI). Totals are kept separate per currency (for example INR loans and MYR loans), never mixed;
+only the EMIs-vs-income share converts to your main currency.
 
 Figures roll forward on their own as EMI dates pass. Optionally the EMI is added to scheduled payments
 (it stops after the last EMI and can be recorded automatically as "Loan & card payments").

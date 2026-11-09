@@ -4,7 +4,7 @@ import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { formatMoney, round2, toNumber } from '../core/currency';
 import { dateLabel, todayISO } from '../core/dates';
 import { uid } from '../core/defaults';
-import { LOAN_KINDS, LoanBasis, addMonthsToDate, loanStatus, nextDueDate, presentValue, resolveRate } from '../core/loans';
+import { LOAN_KINDS, LoanBasis, addMonthsToDate, loanStatus, mainLoanCurrency, nextDueDate, presentValue, resolveRate } from '../core/loans';
 import { Debt, EmiInfo, Recurring } from '../core/models';
 import { confirmAction } from '../shared/confirm-dialog';
 import { DialogService } from '../shared/dialog.service';
@@ -29,7 +29,7 @@ const BASES: ReadonlyArray<[LoanBasis, string]> = [['rate', 'Interest rate'], ['
           </div>
           <div class="field-row three">
             <div class="field"><label for="lf-emi">Monthly EMI</label><input id="lf-emi" formControlName="emi" type="number" step="any" min="0" inputmode="decimal"></div>
-            <div class="field"><label for="lf-cur">Currency</label><select id="lf-cur" formControlName="currency">@for (c of currencies(); track c.code) {<option [value]="c.code">{{ c.label }}</option>}</select></div>
+            <div class="field"><label for="lf-cur">Currency</label><select id="lf-cur" formControlName="currency" (change)="onCurrency()">@for (c of currencies(); track c.code) {<option [value]="c.code">{{ c.label }}</option>}</select></div>
             <div class="field"><label for="lf-day">EMI date</label><div class="input-unit"><span>Day</span><input id="lf-day" formControlName="day" type="number" min="1" max="31" inputmode="numeric"><span>of each month</span></div></div>
           </div>
           <div class="field"><label for="lf-left">EMIs left</label><input id="lf-left" formControlName="monthsLeft" type="number" min="1" max="600" inputmode="numeric" class="short-input">
@@ -148,7 +148,9 @@ export class LoanForm implements OnInit {
     const d = this.debt();
     const acc = this.accounts().find((a) => a.currency === this.store.primary()) ?? this.accounts()[0];
     if (!d?.emi) {
-      this.form.patchValue({ currency: this.store.primary(), accountId: acc?.id ?? '' });
+      // New loans start in the currency your loans use (e.g. INR), paid from an account in that currency.
+      const cur = mainLoanCurrency(this.store.planView().debts, this.store.primary(), this.today);
+      this.form.patchValue({ currency: cur, accountId: (this.accounts().find((a) => a.currency === cur) ?? acc)?.id ?? '' });
       return;
     }
     const e = d.emi;
@@ -161,6 +163,15 @@ export class LoanForm implements OnInit {
       outstanding: s.outstanding == null ? '' : String(s.outstanding), original: e.original ? String(e.original) : '', tenure: e.tenure ? String(e.tenure) : '',
       schedule: !!rec, accountId: rec?.accountId ?? e.accountId ?? acc?.id ?? '', autoPost: !!rec?.autoPost,
     });
+  }
+
+  /** Keep the "paid from" account in the loan's currency when there is one. */
+  protected onCurrency() {
+    const cur = this.form.controls.currency.value;
+    const now = this.accounts().find((a) => a.id === this.form.controls.accountId.value);
+    if (now?.currency === cur) return;
+    const match = this.accounts().find((a) => a.currency === cur);
+    if (match) this.form.patchValue({ accountId: match.id });
   }
 
   protected setBasis(b: LoanBasis) { this.basis.set(b); this.error.set(''); }

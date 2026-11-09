@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { FormsModule } from '@angular/forms';
 import { formatMoney, toNumber } from '../core/currency';
 import { addMonths, dateLabel, monthLabel, todayISO } from '../core/dates';
-import { LoanStatus, addMonthsToDate, loanKindLabel, loanStatus, prepay, schedule, scheduleByYear } from '../core/loans';
+import { LoanStatus, addMonthsToDate, loanKindLabel, loanStatus, loanTotalsByCurrency, prepay, schedule, scheduleByYear } from '../core/loans';
 import { Debt } from '../core/models';
 import { Actions } from '../shared/actions.service';
 import { Progress } from '../shared/charts';
@@ -26,17 +26,22 @@ interface Prepay { lump: string; extra: string; mode: 'tenure' | 'emi' }
       </div>
     </section>
 
-    @if (active().length) {
-      <section class="tiles four" aria-label="All loans">
-        <div class="tile"><span class="tile-k">Still to pay</span><span class="tile-v">{{ totals().payable | money: P() }}</span><span class="delta flat">all remaining EMIs, principal + interest</span></div>
-        <div class="tile"><span class="tile-k"><i style="background: var(--s1)"></i>Principal outstanding</span><span class="tile-v">{{ totals().principal | money: P() }}</span>
-          <span class="delta flat">@if (totals().unknown) {{{ totals().unknown }} loan{{ totals().unknown === 1 ? '' : 's' }} without a rate not included} @else {what you'd owe to close everything today}</span></div>
-        <div class="tile"><span class="tile-k"><i style="background: var(--s2)"></i>Interest still to pay</span><span class="tile-v">{{ totals().interest | money: P() }}</span>
-          <span class="delta flat">@if (totals().payable && !totals().unknown) {{{ pct(totals().interest / totals().payable) }}% of what's left} @else {for loans with a known rate}</span></div>
-        <div class="tile" [class.neg]="(burden() ?? 0) > 0.5"><span class="tile-k">Monthly EMIs</span><span class="tile-v">{{ totals().emi | money: P() }}</span>
-          <span class="delta flat">@if (burden() != null) {{{ pct(burden()!) }}% of your average monthly income} @else {record income to compare}</span></div>
+    @for (t of groups(); track t.currency) {
+      <section class="loan-totals" [attr.aria-label]="t.currency + ' loans'">
+        @if (groups().length > 1) {<h3 class="loan-cur-h">{{ t.currency }} loans <span class="muted small">{{ t.count }} loan{{ t.count === 1 ? '' : 's' }}</span></h3>}
+        <div class="tiles four">
+          <div class="tile"><span class="tile-k">Still to pay</span><span class="tile-v">{{ t.payable | money: t.currency }}</span><span class="delta flat">all remaining EMIs, principal + interest</span></div>
+          <div class="tile"><span class="tile-k"><i style="background: var(--s1)"></i>Principal outstanding</span><span class="tile-v">{{ t.principal | money: t.currency }}</span>
+            <span class="delta flat">@if (t.unknown) {<span>{{ t.unknown }} loan{{ t.unknown === 1 ? '' : 's' }} without a rate not included</span>} @else {<span>what you'd owe to close them today</span>}</span></div>
+          <div class="tile"><span class="tile-k"><i style="background: var(--s2)"></i>Interest still to pay</span><span class="tile-v">{{ t.interest | money: t.currency }}</span>
+            <span class="delta flat">@if (t.payable && !t.unknown) {<span>{{ pct(t.interest / t.payable) }}% of what's left</span>} @else {<span>for loans with a known rate</span>}</span></div>
+          <div class="tile"><span class="tile-k">Monthly EMIs</span><span class="tile-v">{{ t.emi | money: t.currency }}</span>
+            <span class="delta flat">due every month in {{ t.currency }}</span></div>
+        </div>
       </section>
-      @if (totals().unconverted) {<p class="note warn-text">{{ totals().unconverted }} loan(s) have no exchange rate to {{ P() }} and are left out of the totals.</p>}
+    }
+    @if (burden() != null) {
+      <p class="note small" [class.warn-text]="burden()! > 0.5">All EMIs together take about <b>{{ pct(burden()!) }}%</b> of your average monthly income (converted to {{ P() }} only for this comparison).</p>
     }
 
     @if (loans().length) {
@@ -159,27 +164,21 @@ export default class Loans {
   protected readonly active = computed(() => this.loans().filter((x) => !x.s.done));
   protected readonly others = computed(() => this.store.planView().debts.filter((d) => !d.emi));
 
-  protected readonly totals = computed(() => {
-    const f = this.store.finance();
-    const t = { payable: 0, principal: 0, interest: 0, emi: 0, unknown: 0, unconverted: 0 };
-    for (const { d, s } of this.active()) {
-      const c = (v: number) => f.convert(v, d.currency, f.primary);
-      const pay = c(s.payable);
-      if (pay == null) { t.unconverted++; continue; }
-      t.payable += pay;
-      t.emi += c(s.emi) ?? 0;
-      if (s.outstanding == null) t.unknown++;
-      else { t.principal += c(s.outstanding) ?? 0; t.interest += c(s.interestLeft ?? 0) ?? 0; }
-    }
-    return t;
-  });
-  /** EMIs as a share of average income over the last three complete months. */
+  /** Separate totals for each loan currency (INR, MYR, ...), never mixed. */
+  protected readonly groups = computed(() => loanTotalsByCurrency(this.store.planView().debts, this.today));
+  /** All EMIs as a share of average income over the last three complete months, in the main currency. */
   protected readonly burden = computed(() => {
     const f = this.store.finance();
     const cm = this.today.slice(0, 7);
     const inc = [1, 2, 3].map((i) => f.monthSummary(addMonths(cm, -i)).income).filter((v) => v > 0);
-    if (!inc.length || !this.totals().emi) return null;
-    return this.totals().emi / (inc.reduce((a, b) => a + b, 0) / inc.length);
+    if (!inc.length || !this.groups().length) return null;
+    let emi = 0;
+    for (const g of this.groups()) {
+      const v = f.convert(g.emi, g.currency, f.primary);
+      if (v == null) return null;
+      emi += v;
+    }
+    return emi / (inc.reduce((a, b) => a + b, 0) / inc.length);
   });
 
   protected kind(d: Debt) { return loanKindLabel(d.emi?.kind); }

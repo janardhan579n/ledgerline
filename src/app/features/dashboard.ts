@@ -1,4 +1,4 @@
-import { loanStatus } from '../core/loans';
+import { loanStatus, loanTotalsByCurrency } from '../core/loans';
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { addMonths, dateLabel, monthLabel, periodRange, todayISO } from '../core/dates';
@@ -83,7 +83,7 @@ import { Alerts } from './alerts';
         </section>
         @if (loans().length) {
           <section class="card">
-            <div class="card-h"><h3>Loans & EMIs</h3><a class="link" routerLink="/loans">Details</a></div>
+            <div class="card-h"><h3>Loans & EMIs</h3><a class="link" routerLink="/loans">@for (t of loanTotal(); track t.currency) {@if (!$first) {<span> + </span>}<span>{{ t.payable | money: t.currency }}</span>} left</a></div>
             <ul class="mini-list">
               @for (l of loans(); track l.d.id) {
                 <li><div class="ml-top"><span>{{ l.d.name }}</span><b>{{ l.s.payable | money: l.d.currency }}</b></div>
@@ -123,6 +123,7 @@ export default class Dashboard {
     const today = todayISO();
     return this.store.planView().debts.filter((d) => d.emi).map((d) => ({ d, s: loanStatus(d, today)! })).filter((x) => !x.s.done).slice(0, 4);
   });
+  protected readonly loanTotal = computed(() => loanTotalsByCurrency(this.store.planView().debts));
   private readonly prev = computed(() => this.fin().monthSummary(addMonths(this.ui.month(), -1)));
   protected readonly tiles = computed(() => {
     const s = this.s(), p = this.prev();
