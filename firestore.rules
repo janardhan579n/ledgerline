@@ -29,11 +29,12 @@ service cloud.firestore {
       return isAllowed() && request.auth.uid == uid;
     }
 
-    // settings, plan (budgets, goals, recurring, debts, assumptions) and cached market rates
+    // settings, plan (budgets, goals, recurring, debts, assumptions), cached market rates and price alerts.
+    // 'alertState' is written only by the hourly price-alert job (admin access) and is read-only here.
     match /users/{uid}/ledger/{docId} {
       allow read, delete: if isOwner(uid);
       allow create, update: if isOwner(uid)
-        && docId in ['settings', 'plan', 'market']
+        && docId in ['settings', 'plan', 'market', 'alerts']
         && request.resource.data.keys().size() < 30;
     }
 
@@ -46,6 +47,17 @@ service cloud.firestore {
         && request.resource.data.month == month
         && request.resource.data.items is list
         && request.resource.data.items.size() <= 3000;
+    }
+
+    // browsers that receive price-alert push notifications: { token, label, createdAt }
+    match /users/{uid}/devices/{deviceId} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['token', 'label', 'createdAt'])
+        && request.resource.data.token is string
+        && request.resource.data.token.size() < 1000
+        && request.resource.data.label is string
+        && request.resource.data.label.size() < 100;
     }
 
     // small copies of scanned receipts and payslips (base64 image or PDF, under ~700 KB)

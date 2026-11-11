@@ -18,6 +18,6 @@ export const appConfig: ApplicationConfig = {
     // The service worker fetches every request the page makes, under the CSP it was installed with, so its
     // connect-src must cover all outside hosts the page loads from. Bump ?v= whenever firebase.json's CSP
     // changes: the new URL makes browsers install a fresh worker with the new policy.
-    provideServiceWorker('ngsw-worker.js?v=2', { enabled: !isDevMode(), registrationStrategy: 'registerWhenStable:30000' }),
+    provideServiceWorker('ngsw-worker.js?v=3', { enabled: !isDevMode(), registrationStrategy: 'registerWhenStable:30000' }),
   ],
 };

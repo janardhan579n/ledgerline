@@ -25,7 +25,7 @@ export class DemoBackend extends Backend {
         const m = k.match(new RegExp(`^${uid}/months/(.+)$`));
         if (m) months[m[1]] = (v as { items: never[] }).items;
       }
-      h.next({ settings: get('settings'), plan: get('plan'), market: get('market'), months, fromServer: true });
+      h.next({ settings: get('settings'), plan: get('plan'), market: get('market'), alerts: get('alerts'), alertState: get('alertState'), months, fromServer: true });
     };
     this.listeners.add(fire);
     queueMicrotask(fire);
@@ -48,7 +48,7 @@ export class DemoBackend extends Backend {
   }
 
   private key(uid: string, ref: DocRef) {
-    return `${uid}/${ref.kind === 'ledger' ? 'ledger' : ref.kind === 'month' ? 'months' : 'receipts'}/${ref.id}`;
+    return `${uid}/${ref.kind === 'ledger' ? 'ledger' : ref.kind === 'month' ? 'months' : ref.kind === 'device' ? 'devices' : 'receipts'}/${ref.id}`;
   }
 
   private notify() {

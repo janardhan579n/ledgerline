@@ -1,0 +1,42 @@
+# Hourly price-alert check (gold, silver, currencies). Free on GitHub Actions.
+# Needs the repository secret FIREBASE_SERVICE_ACCOUNT (see README → Price alerts).
+name: Price alerts
+
+on:
+  schedule:
+    - cron: '7 * * * *' # every hour at :07 (GitHub may start it a few minutes late)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Only print what would be sent'
+        type: boolean
+        default: false
+
+concurrency:
+  group: price-alerts
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scripts/price-alerts/package-lock.json
+      - name: Install
+        working-directory: scripts/price-alerts
+        run: npm ci --no-audit --no-fund
+      - name: Check prices and send alerts
+        working-directory: scripts/price-alerts
+        run: npx tsx run.ts
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          APP_URL: https://personal-ledger.web.app
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}

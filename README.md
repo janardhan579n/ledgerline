@@ -54,6 +54,34 @@ Tap **Scan** (or **Scan a receipt or payslip** in the Add form), choose photos o
   4. In **App Check → APIs**, enforce **Firebase AI Logic** (and later Cloud Firestore, once its chart shows almost all requests verified).
   Classic reCAPTCHA v3 keys can no longer be registered with App Check.
 
+## Price alerts
+
+Price alerts (in the menu) follows gold (24K/22K/18K, per gram, 10 g, ounce or kg), silver and any currency pair
+(for example 1 MYR in INR). For each alert choose: a **daily update** at your chosen time, **goes above** or
+**goes below** a price, or **moves by** a percentage; once, or every time it happens.
+Prices are international spot prices from [xaus.com](https://xaus.com/api) (gold, silver) and
+[open.er-api.com](https://open.er-api.com) (currencies); shop and bank prices add a premium.
+
+Notifications come from a scheduled job that runs every hour on GitHub Actions
+(`.github/workflows/price-alerts.yml` → `scripts/price-alerts/run.ts`, using the same rules code as the app).
+Hourly runs use about 720 of the 2,000 free GitHub Actions minutes a month for a private repo.
+
+### One-time setup
+
+1. **Let the job read alerts.** Firebase console → Project settings → Service accounts → *Generate new private key*.
+   Open the downloaded file, copy all of it, then on GitHub: repo → Settings → Secrets and variables → Actions →
+   *New repository secret*, name `FIREBASE_SERVICE_ACCOUNT`, paste, save. Delete the downloaded file afterwards;
+   it's a full-access key and must never be committed.
+2. **Phone push (ntfy).** In the app, turn on *Phone push with the ntfy app*, install ntfy, subscribe to the topic shown,
+   and press *Send a test*.
+3. **Browser push (optional).** Firebase console → Project settings → Cloud Messaging → Web configuration →
+   Web Push certificates → *Generate key pair*. Copy the key into `pushConfig.vapidKey` in
+   `src/environments/firebase.config.ts`, build and deploy, then turn on *Notifications on this device* in each browser.
+   On iPhone/iPad, add Ledgerline to the Home Screen first and open it from there.
+   If your browser API key has an API restriction list, also allow *Firebase Installations API* and *FCM Registration API*.
+4. **Check it.** GitHub → Actions → *Price alerts* → *Run workflow* (tick *dry run* to only print what would be sent).
+   The Price alerts page shows when the job last checked and any problem it hit.
+
 ## Loans & EMIs
 
 Loans & EMIs (in the menu) tracks each loan from a few details: the monthly EMI, the EMI date and how many EMIs are left.

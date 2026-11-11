@@ -132,3 +132,16 @@ describe('document shape', () => {
     await assertFails(getDoc(doc(db, 'users/alice')));
   });
 });
+
+describe('price alerts', () => {
+  it('lets people save their alerts and devices but never the job\'s state', async () => {
+    const db = user('alice');
+    await assertSucceeds(setDoc(doc(db, 'users/alice/ledger/alerts'), { alerts: [], dailyHour: 9 }));
+    await assertFails(setDoc(doc(db, 'users/alice/ledger/alertState'), { rules: {} }));
+    await env.withSecurityRulesDisabled(async (ctx) => setDoc(doc(ctx.firestore(), 'users/alice/ledger/alertState'), { rules: {} }));
+    await assertSucceeds(getDoc(doc(db, 'users/alice/ledger/alertState')));
+    await assertSucceeds(setDoc(doc(db, 'users/alice/devices/d1'), { token: 'abc', label: 'Chrome on Mac', createdAt: 'now' }));
+    await assertFails(setDoc(doc(db, 'users/alice/devices/d2'), { token: 'abc', label: 'x', createdAt: 'now', extra: 1 }));
+    await assertFails(getDoc(doc(user('bob'), 'users/alice/devices/d1')));
+  });
+});

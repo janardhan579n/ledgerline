@@ -5,6 +5,7 @@ export const NAV = [
   { path: 'budgets', label: 'Budgets', icon: 'budget', month: true },
   { path: 'goals', label: 'Savings goals', icon: 'goal', month: false },
   { path: 'loans', label: 'Loans & EMIs', icon: 'loan', month: false },
+  { path: 'prices', label: 'Price alerts', icon: 'bell', month: false },
   { path: 'reports', label: 'Reports', icon: 'report', month: false },
   { path: 'cashflow', label: 'Cash flow', icon: 'flow', month: true },
   { path: 'guidance', label: 'Guidance', icon: 'guide', month: false },

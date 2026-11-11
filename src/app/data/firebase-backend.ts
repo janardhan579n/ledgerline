@@ -11,6 +11,7 @@ import {
 import { AppCheck, ReCaptchaEnterpriseProvider, getToken, initializeAppCheck } from 'firebase/app-check';
 import { aiConfig, firebaseConfig, useEmulators } from '../../environments/firebase.config';
 import { MarketRates, Plan, Settings, Transaction } from '../core/models';
+import { AlertSettings, AlertState } from '../core/price-alerts';
 import { AppUser, Backend, DocRef, LedgerSnapshot, SubscribeHandlers } from './backend';
 
 @Injectable()
@@ -154,7 +155,7 @@ export class FirebaseBackend extends Backend {
   }
 
   private listen(uid: string, h: SubscribeHandlers, seat: () => string): () => void {
-    const state: LedgerSnapshot = { settings: null, plan: null, market: null, months: {}, fromServer: false };
+    const state: LedgerSnapshot = { settings: null, plan: null, market: null, alerts: null, alertState: null, months: {}, fromServer: false };
     let ledgerServer = false, monthsServer = false, ledgerSeen = false, monthsSeen = false;
     const emit = () => {
       if (!ledgerSeen || !monthsSeen) return;
@@ -166,11 +167,13 @@ export class FirebaseBackend extends Backend {
         : `This Google account (${this.user()?.email ?? 'unknown'}) isn't allowed to use this app. Sign out and use an allowed account.`);
 
     const unLedger = onSnapshot(collection(this.db, 'users', uid, 'ledger'), { includeMetadataChanges: true }, (snap) => {
-      state.settings = null; state.plan = null; state.market = null;
+      state.settings = null; state.plan = null; state.market = null; state.alerts = null; state.alertState = null;
       snap.docs.forEach((d) => {
         if (d.id === 'settings') state.settings = d.data() as Settings;
         else if (d.id === 'plan') state.plan = d.data() as Plan;
         else if (d.id === 'market') state.market = d.data() as MarketRates;
+        else if (d.id === 'alerts') state.alerts = d.data() as AlertSettings;
+        else if (d.id === 'alertState') state.alertState = d.data() as AlertState;
       });
       ledgerSeen = true;
       ledgerServer = !snap.metadata.fromCache;
@@ -206,7 +209,7 @@ export class FirebaseBackend extends Backend {
   }
 
   private docRef(uid: string, ref: DocRef) {
-    const coll = ref.kind === 'ledger' ? 'ledger' : ref.kind === 'month' ? 'months' : 'receipts';
+    const coll = ref.kind === 'ledger' ? 'ledger' : ref.kind === 'month' ? 'months' : ref.kind === 'device' ? 'devices' : 'receipts';
     return doc(this.db, 'users', uid, coll, ref.id);
   }
 }

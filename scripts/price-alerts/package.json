@@ -1,0 +1,13 @@
+{
+  "name": "ledgerline-price-alerts",
+  "private": true,
+  "description": "Hourly price-alert check, run by .github/workflows/price-alerts.yml",
+  "type": "module",
+  "scripts": {
+    "start": "tsx run.ts"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "tsx": "^4.19.0"
+  }
+}

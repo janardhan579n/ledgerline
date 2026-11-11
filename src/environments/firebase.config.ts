@@ -25,6 +25,11 @@ export const aiConfig = {
 };
 
 /** Set to true to point the app at the local Firebase emulators (npm run emulators). */
+/**
+ * Browser push for price alerts. Paste the "Web Push certificates" key pair (public key) from
+ * Firebase console → Project settings → Cloud Messaging. Leave empty to turn browser push off.
+ */
+export const pushConfig = { vapidKey: '' };
 export const useEmulators = false;
 
 export const isFirebaseConfigured = () => !!firebaseConfig.projectId && !!firebaseConfig.apiKey;

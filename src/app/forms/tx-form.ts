@@ -4,7 +4,8 @@ import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { formatMoney, round2, toNumber } from '../core/currency';
 import { dateLabel, todayISO } from '../core/dates';
 import { TX_TYPES, typeLabel, uid } from '../core/defaults';
-import { Transaction, TxType } from '../core/models';
+import { nextOccurrence } from '../core/finance';
+import { Frequency, Recurring, Transaction, TxType } from '../core/models';
 import { confirmAction } from '../shared/confirm-dialog';
 import { DialogService } from '../shared/dialog.service';
 import { Modal } from '../shared/modal';
@@ -67,7 +68,23 @@ import { ScanDialog } from './scan-dialog';
             </div>
           }
           <div class="field"><label for="tf-notes">Notes <small class="muted">(optional)</small></label>
-            <input id="tf-notes" formControlName="notes" maxlength="200" placeholder="e.g. Tesco, rent for November, sent to Amma"></div>
+            <input id="tf-notes" type="text" formControlName="notes" maxlength="200" placeholder="e.g. Tesco, rent for November, sent to Amma"></div>
+          @if (canRepeat()) {
+            <div class="repeat-box" [class.on]="value().repeat">
+              <label class="check"><input type="checkbox" formControlName="repeat"><span><b>Repeat this {{ type() === 'income' ? 'income' : 'payment' }}</b> with the same amount, e.g. a WiFi bill or rent</span></label>
+              @if (value().repeat) {
+                <div class="repeat-opts">
+                  <select formControlName="repeatFreq" aria-label="How often">
+                    <option value="monthly">Every month</option><option value="weekly">Every week</option><option value="biweekly">Every 2 weeks</option><option value="yearly">Every year</option>
+                  </select>
+                  <label class="check"><input type="checkbox" formControlName="repeatAuto"><span>Record it automatically on the date</span></label>
+                </div>
+                <small class="muted">Next one: {{ repeatNext() }}. @if (value().repeatAuto) {It's added for you on the day.} @else {You'll get a reminder to confirm it.} Change or stop it any time in Income & salary → Recurring.</small>
+              }
+            </div>
+          } @else if (linkedRecurring(); as r) {
+            <p class="small muted repeat-note"><app-icon name="refresh" />Part of the repeating {{ r.type === 'income' ? 'income' : 'payment' }} "{{ r.name }}". Edit it in Income & salary → Recurring.</p>
+          }
           @if (value().currency !== primary()) {
             <details class="adv" [open]="!!value().fx">
               <summary>Exchange rate for this transaction</summary>
@@ -106,6 +123,7 @@ export class TxForm implements OnInit {
 
   protected readonly form = this.fb.group({
     amount: '', currency: 'MYR', date: todayISO(), categoryId: '', accountId: '', toAccountId: '', toAmount: '', goalId: '', notes: '', fx: '',
+    repeat: false, repeatFreq: 'monthly', repeatAuto: true,
   });
   protected readonly value = toSignal(this.form.valueChanges, { initialValue: this.form.getRawValue() });
 
@@ -117,6 +135,16 @@ export class TxForm implements OnInit {
   protected readonly currencies = computed(() => currencyChoices(this.settings(), this.value().currency));
   protected readonly hasTo = computed(() => ['transfer', 'savings', 'investment'].includes(this.type()));
   protected readonly accountLabel = computed(() => ({ income: 'Paid into', expense: 'Paid from', transfer: 'From account' } as Record<string, string>)[this.type()] ?? (this.out() ? 'Back into account' : 'From account'));
+  /** New income or expense that isn't already from a schedule can be turned into a repeating one. */
+  protected readonly canRepeat = computed(() => (this.type() === 'income' || this.type() === 'expense') && !this.tx()?.recurringId && !this.preset().recurringId);
+  protected readonly linkedRecurring = computed(() => {
+    const id = this.tx()?.recurringId;
+    return id ? this.store.planView().recurring.find((r) => r.id === id) ?? null : null;
+  });
+  protected readonly repeatNext = computed(() => {
+    const v = this.value();
+    return /^\d{4}-\d{2}-\d{2}$/.test(v.date ?? '') ? dateLabel(firstRepeat(v.date!, (v.repeatFreq ?? 'monthly') as Frequency), true) : '—';
+  });
   protected readonly toLabel = computed(() => (this.type() === 'transfer' ? 'To account' : this.type() === 'savings' ? 'Savings account (optional)' : 'Investment account (optional)'));
   protected readonly crossTo = computed(() => {
     if (!this.hasTo()) return null;
@@ -161,6 +189,7 @@ export class TxForm implements OnInit {
       goalId: base.goalId ?? '',
       notes: base.notes ?? '',
       fx: base.fx && base.fx.base === this.primary() ? String(base.fx.rate) : '',
+      repeat: false, repeatFreq: 'monthly', repeatAuto: true,
     });
   }
 
@@ -205,8 +234,22 @@ export class TxForm implements OnInit {
     const fx = toNumber(v.fx);
     if (tx.currency !== this.primary() && fx > 0) tx.fx = { base: this.primary(), rate: fx };
     if (!this.settings().currencies.includes(tx.currency)) this.store.saveSettings((s) => ensureCurrency(s, tx.currency));
+    let rec: Recurring | null = null;
+    if (v.repeat && this.canRepeat()) {
+      const freq = v.repeatFreq as Frequency;
+      const cat = this.store.finance().category(tx.categoryId);
+      rec = {
+        id: uid(), name: tx.notes || cat?.name || typeLabel(type), type: type as 'income' | 'expense', amount: tx.amount, currency: tx.currency,
+        accountId: tx.accountId, categoryId: tx.categoryId, freq, day: Number(tx.date.slice(8)), nextDate: firstRepeat(tx.date, freq),
+        isSalary: type === 'income' && cat?.name === 'Salary', autoPost: v.repeatAuto, active: true,
+      };
+      tx.recurringId = rec.id;
+      const r = rec;
+      this.store.savePlan((p) => p.recurring.push(r));
+    }
     this.store.saveTx(tx, prev?.date);
-    this.toast.show(prev ? 'Updated.' : 'Saved.');
+    if (rec?.autoPost) setTimeout(() => this.store.autoPostRecurring(), 50);
+    this.toast.show(rec ? `Saved. It repeats ${FREQ_TEXT[rec.freq]}, next on ${dateLabel(rec.nextDate, true)}.` : prev ? 'Updated.' : 'Saved.');
     this.dialog.close(tx);
   }
 
@@ -216,4 +259,17 @@ export class TxForm implements OnInit {
     const ok = await confirmAction(this.dialog, `Delete this ${typeLabel(t.type).toLowerCase()} of ${formatMoney(t.amount, t.currency)} on ${dateLabel(t.date, true)}?`, 'Delete');
     if (ok) { this.store.deleteTx(t); this.toast.show('Transaction deleted.'); }
   }
+}
+
+const FREQ_TEXT: Record<Frequency, string> = { monthly: 'every month', weekly: 'every week', biweekly: 'every 2 weeks', yearly: 'every year' };
+
+/**
+ * First repeat after a transaction: the next occurrence after its date. If that is already in the past
+ * (an old bill recorded late), start from the next one after today instead of back-filling.
+ */
+export function firstRepeat(date: string, freq: Frequency, today = todayISO()): string {
+  const r = { freq, day: Number(date.slice(8)) };
+  let d = nextOccurrence(r, date);
+  for (let i = 0; d <= today && i < 600; i++) d = nextOccurrence(r, d);
+  return d;
 }

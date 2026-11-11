@@ -1,5 +1,6 @@
 import { Signal } from '@angular/core';
 import { MarketRates, Plan, Settings, Transaction } from '../core/models';
+import { AlertSettings, AlertState } from '../core/price-alerts';
 
 export interface AppUser {
   uid: string;
@@ -10,7 +11,8 @@ export interface AppUser {
 
 /** Where each piece of a user's ledger is stored. Everything lives under users/{uid}/. */
 export type DocRef =
-  | { kind: 'ledger'; id: 'settings' | 'plan' | 'market' }
+  | { kind: 'ledger'; id: 'settings' | 'plan' | 'market' | 'alerts' }
+  | { kind: 'device'; id: string } // a browser that receives push notifications: { token, label, createdAt }
   | { kind: 'month'; id: string } // YYYY-MM, holds { month, items: Transaction[] }
   | { kind: 'receipt'; id: string }; // a stored copy of a scanned receipt (ReceiptDoc)
 
@@ -29,6 +31,9 @@ export interface LedgerSnapshot {
   settings: Settings | null;
   plan: Plan | null;
   market: MarketRates | null;
+  /** Price alerts set up by the person, and what the hourly job last did with them (read-only here). */
+  alerts: AlertSettings | null;
+  alertState: AlertState | null;
   months: Record<string, Transaction[]>;
   /** False while showing cached data the server hasn't confirmed yet. */
   fromServer: boolean;

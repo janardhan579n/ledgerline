@@ -1,3 +1,4 @@
+import { ALERT_DEFAULTS, AlertSettings, AlertState } from '../core/price-alerts';
 import { computed, effect, inject, untracked } from '@angular/core';
 import { patchState, signalStore, withComputed, withHooks, withMethods, withState } from '@ngrx/signals';
 import { monthKey, todayISO } from '../core/dates';
@@ -16,12 +17,14 @@ interface LedgerState {
   settings: Settings | null;
   plan: Plan | null;
   market: MarketRates | null;
+  alerts: AlertSettings | null;
+  alertState: AlertState | null;
   months: Record<string, Transaction[]>;
   /** True once data has been confirmed by the server (not just the offline cache). */
   confirmed: boolean;
 }
 
-const initial: LedgerState = { status: 'signed-out', note: '', uid: null, settings: null, plan: null, market: null, months: {}, confirmed: false };
+const initial: LedgerState = { status: 'signed-out', note: '', uid: null, settings: null, plan: null, market: null, alerts: null, alertState: null, months: {}, confirmed: false };
 
 /** Fallback used only to render before settings exist; never written. */
 const FALLBACK_SETTINGS = defaultSettings();
@@ -43,6 +46,7 @@ export const LedgerStore = signalStore(
       settingsView: computed(() => s.settings() ?? FALLBACK_SETTINGS),
       finance,
       primary: computed(() => s.settings()?.primary ?? 'MYR'),
+      alertsView: computed<AlertSettings>(() => ({ ...ALERT_DEFAULTS, ...(s.alerts() ?? {}) })),
       needsOnboarding: computed(() => s.status() === 'ready' && s.confirmed() && !s.settings()),
     };
   }),
@@ -56,7 +60,7 @@ export const LedgerStore = signalStore(
       queues.set(key, p);
       return p;
     };
-    const writeLedger = (id: 'settings' | 'plan' | 'market', data: object) => {
+    const writeLedger = (id: 'settings' | 'plan' | 'market' | 'alerts', data: object) => {
       const u = store.uid();
       if (!u) return Promise.resolve();
       return enqueue('ledger/' + id, () => backend.write(u, { kind: 'ledger', id }, data));
@@ -113,6 +117,23 @@ export const LedgerStore = signalStore(
     return {
       saveSettings,
       savePlan,
+      /** Price alerts and how to be notified. */
+      saveAlerts(mutate: (a: AlertSettings) => void) {
+        const next = structuredClone({ ...ALERT_DEFAULTS, ...(store.alerts() ?? {}) });
+        mutate(next);
+        next.updatedAt = new Date().toISOString();
+        patchState(store, { alerts: next });
+        return writeLedger('alerts', next);
+      },
+      /** A browser that should receive push notifications. */
+      saveDevice(id: string, data: { token: string; label: string; createdAt: string }) {
+        const u = store.uid();
+        return u ? enqueue('devices/' + id, () => backend.write(u, { kind: 'device', id }, data)) : Promise.resolve();
+      },
+      removeDevice(id: string) {
+        const u = store.uid();
+        return u ? enqueue('devices/' + id, () => backend.remove(u, { kind: 'device', id })) : Promise.resolve();
+      },
       saveMarket(m: MarketRates) {
         patchState(store, { market: m });
         return writeLedger('market', m);
@@ -220,7 +241,7 @@ export const LedgerStore = signalStore(
           unsubscribe = backend.subscribe(user.uid, {
             next: (snap) => {
               patchState(store, {
-                status: 'ready', settings: snap.settings, plan: snap.plan, market: snap.market, months: snap.months,
+                status: 'ready', settings: snap.settings, plan: snap.plan, market: snap.market, alerts: snap.alerts, alertState: snap.alertState, months: snap.months,
                 confirmed: store.confirmed() || snap.fromServer, note: snap.fromServer ? '' : store.note(),
               });
               if (snap.fromServer) clearTimeout(slowTimer);
