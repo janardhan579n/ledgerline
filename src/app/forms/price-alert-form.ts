@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, si
 import { FormsModule } from '@angular/forms';
 import { CURRENCIES, toNumber } from '../core/currency';
 import { uid } from '../core/defaults';
-import { Asset, MetalUnit, NOTIFICATIONS_ENABLED, PURITIES, PriceAlert, RuleKind, UNIT_LABEL, alertSubject, alertValue, formatPrice } from '../core/price-alerts';
+import { Asset, MetalUnit, NOTIFICATIONS_ENABLED, PURITIES, premiumFrom, PriceAlert, RuleKind, UNIT_LABEL, alertSubject, alertValue, formatPrice } from '../core/price-alerts';
 import { confirmAction } from '../shared/confirm-dialog';
 import { DialogService } from '../shared/dialog.service';
 import { Modal } from '../shared/modal';
@@ -42,7 +42,25 @@ const KINDS: ReadonlyArray<[RuleKind, string]> = NOTIFICATIONS_ENABLED
               <div class="field"><label for="pa-cur2">In</label><select id="pa-cur2" name="cur2" [ngModel]="currency()" (ngModelChange)="currency.set($event)">@for (c of currencies(); track c) {<option [value]="c">{{ c }}</option>}</select></div>
             </div>
           }
-          <p class="small muted">{{ subject() }} is <b>{{ now() ?? 'loading…' }}</b> right now.</p>
+          <p class="small muted">{{ subject() }} is <b>{{ now() ?? 'loading…' }}</b> right now (international price).</p>
+
+          @if (asset() !== 'fx') {
+            <div class="shop-box" [class.on]="!!premium()">
+              <div class="field-row">
+                <div class="field"><label for="pa-shop">Your shop's price now <span class="muted">(optional)</span></label>
+                  <input id="pa-shop" name="shop" type="number" min="0" step="any" inputmode="decimal" [ngModel]="quoted()" (ngModelChange)="setQuoted($event)" placeholder="e.g. 494">
+                  <small>What a shop or app quotes you today for the same {{ unitLabel() }}, in {{ currency() }}.</small></div>
+                <div class="field"><label for="pa-shopname">Shop <span class="muted">(optional)</span></label>
+                  <input id="pa-shopname" name="shopname" type="text" maxlength="40" [ngModel]="shopName()" (ngModelChange)="shopName.set($event)" placeholder="e.g. Meena Gems"></div>
+              </div>
+              @if (premium(); as p) {
+                <p class="small">That's <b>{{ p }}% above</b> the international price. Ledgerline will keep adding {{ p }}% as the price moves, so you see roughly what you'd pay.
+                  <button type="button" class="link-btn" (click)="clearShop()">Remove</button></p>
+              } @else {
+                <p class="small muted">Leave empty to follow the international price only.</p>
+              }
+            </div>
+          }
 
           <div class="field"><span class="lbl">{{ notify ? 'Notify me' : 'Target (optional)' }}</span>
             <div class="seg small" role="radiogroup" aria-label="When to notify">
@@ -62,7 +80,7 @@ const KINDS: ReadonlyArray<[RuleKind, string]> = NOTIFICATIONS_ENABLED
               <div class="field"><label for="pa-val">{{ kind() === 'above' ? 'When it rises to or above' : 'When it falls to or below' }}</label>
                 <div class="pa-target"><input id="pa-val" name="val" type="number" min="0" step="any" inputmode="decimal" [ngModel]="value()" (ngModelChange)="value.set($event)" class="short-input">
                   @if (nowValue() != null) {<button type="button" class="btn sm ghost" (click)="useNow()">Use current</button>}</div>
-                <small>In {{ currency() }}{{ asset() === 'fx' ? '' : ', ' + unitLabel() }}.@if (!notify) { Your list shows "Target reached" when the price gets there.}</small></div>
+                <small>In {{ currency() }}{{ asset() === 'fx' ? '' : ', ' + unitLabel() }}@if (premium()) {, as your shop's price (including their {{ premium() }}%)} @else {, international price}.@if (!notify) { Your list shows "Target reached" when the price gets there.}</small></div>
             }
           }
           @if (notify && kind() !== 'daily') {
@@ -107,6 +125,9 @@ export class PriceAlertForm implements OnInit {
   protected readonly kind = signal<RuleKind>('above');
   protected readonly value = signal<string | number>('');
   protected readonly repeat = signal<'once' | 'every'>('once');
+  protected readonly premium = signal<number | null>(null);
+  protected readonly quoted = signal<string | number>('');
+  protected readonly shopName = signal('');
 
   protected readonly currencies = computed(() => [...new Set([...this.store.settingsView().currencies, 'USD', ...CURRENCIES.map((c) => c[0])])]);
   private readonly draft = computed(() => ({ asset: this.asset(), currency: this.currency(), base: this.base(), unit: this.unit(), purity: this.purity() }));
@@ -114,6 +135,14 @@ export class PriceAlertForm implements OnInit {
   protected readonly unitLabel = computed(() => UNIT_LABEL[this.unit()]);
   protected readonly nowValue = computed(() => { const q = this.prices.quotes(); return q ? alertValue(this.draft(), q) : null; });
   protected readonly now = computed(() => { const v = this.nowValue(); return v == null ? null : formatPrice(v, this.draft()); });
+  /** The quote gives a markup against today's international price; after that the markup is kept. */
+  protected setQuoted(q: string | number) {
+    this.quoted.set(q);
+    const spot = this.nowValue();
+    const p = spot == null ? null : premiumFrom(toNumber(String(q ?? '')), spot);
+    this.premium.set(p != null && p > -100 ? p : null);
+  }
+  protected clearShop() { this.quoted.set(''); this.premium.set(null); this.shopName.set(''); }
   protected readonly hourLabel = computed(() => { const h = this.store.alertsView().dailyHour; return `${h % 12 || 12} ${h < 12 ? 'am' : 'pm'}`; });
 
   ngOnInit() {
@@ -135,10 +164,17 @@ export class PriceAlertForm implements OnInit {
     this.kind.set(KINDS.some((k) => k[0] === a.kind) ? a.kind : 'daily');
     this.value.set(a.value ?? '');
     this.repeat.set(a.repeat ?? 'once');
+    this.premium.set(a.shopPremium ?? null);
+    this.shopName.set(a.shopName ?? '');
+    if (a.shopPremium) {
+      const spot = this.nowValue();
+      if (spot != null) this.quoted.set(+(spot * (1 + a.shopPremium / 100)).toFixed(2));
+    }
   }
 
   protected setAsset(x: Asset) {
     this.asset.set(x);
+    if (x === 'fx') this.clearShop();
     const s = this.store.settingsView();
     if (x === 'fx') {
       this.base.set(s.primary);
@@ -153,7 +189,9 @@ export class PriceAlertForm implements OnInit {
   }
   protected useNow() {
     const v = this.nowValue();
-    if (v != null) this.value.set(+v.toFixed(this.asset() === 'fx' ? 4 : 2));
+    const p = this.premium();
+    const use = v == null ? null : p ? v * (1 + p / 100) : v;
+    if (use != null) this.value.set(+use.toFixed(this.asset() === 'fx' ? 4 : 2));
   }
 
   protected save() {
@@ -168,6 +206,7 @@ export class PriceAlertForm implements OnInit {
       ...(this.asset() === 'fx' ? { base: this.base() } : { unit: this.unit() }),
       ...(this.asset() === 'gold' ? { purity: this.purity() } : {}),
       ...(k === 'daily' ? {} : { value: v, repeat: this.repeat() }),
+      ...(this.premium() && this.asset() !== 'fx' ? { shopPremium: this.premium()!, ...(this.shopName().trim() ? { shopName: this.shopName().trim() } : {}) } : {}),
     };
     void this.store.saveAlerts((s) => {
       const i = s.alerts.findIndex((x) => x.id === a.id);

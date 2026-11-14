@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ALERT_DEFAULTS, AlertSettings, PriceAlert, Quotes, TROY_OZ_G, alertSubject, alertValue, describeRule, evaluate, fxRate, localClock, newTopic, quotesFrom, targetReached } from './price-alerts';
+import { ALERT_DEFAULTS, AlertSettings, PriceAlert, Quotes, TROY_OZ_G, alertSubject, alertValue, describeRule, evaluate, fxRate, localClock, newTopic, premiumFrom, quotesFrom, shopValue, targetReached } from './price-alerts';
 
 // Gold USD 4,000/oz, silver USD 50/oz, 1 USD = 4.2 MYR = 88 INR
 const q = (goldOz = 4000, silverOz = 50, myr = 4.2, inr = 88): Quotes => ({ goldUsdG: goldOz / TROY_OZ_G, silverUsdG: silverOz / TROY_OZ_G, usd: { USD: 1, MYR: myr, INR: inr }, asOf: '' });
@@ -102,5 +102,23 @@ describe('in-app target check', () => {
     expect(targetReached(alert({ kind: 'daily' }), 543)).toBe(false);
     expect(targetReached(alert({ kind: 'above', value: 540, active: false }), 543)).toBe(false);
     expect(targetReached(alert({ kind: 'above', value: 540 }), null)).toBe(false);
+  });
+});
+
+describe('shop prices', () => {
+  it('works out the markup in a quoted price and applies it as spot moves', () => {
+    // Spot 22K/g RM 468.33, shop quotes RM 494 → 5.48% markup
+    expect(premiumFrom(494, 468.33)).toBe(5.48);
+    expect(premiumFrom(494, 0)).toBeNull();
+    expect(shopValue({ shopPremium: 5.48 }, 468.33)).toBeCloseTo(494, 1);
+    expect(shopValue({ shopPremium: 5.48 }, 480)).toBeCloseTo(506.3, 1);
+    expect(shopValue({}, 468.33)).toBe(468.33);
+    expect(shopValue({ shopPremium: 5 }, null)).toBeNull();
+  });
+  it('checks targets against the shop price when a markup is set', () => {
+    const a = alert({ kind: 'below', value: 500, shopPremium: 5.48 });
+    expect(targetReached(a, 468.33)).toBe(true); // shop 494 ≤ 500
+    expect(targetReached(a, 480)).toBe(false); // shop 506 > 500
+    expect(targetReached({ ...a, shopPremium: undefined }, 480)).toBe(true); // spot 480 ≤ 500
   });
 });

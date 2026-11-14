@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { dateLabel } from '../core/dates';
-import { NOTIFICATIONS_ENABLED, PriceAlert, RuleState, targetReached, alertSubject, alertValue, describeRule, formatPrice, newTopic } from '../core/price-alerts';
+import { NOTIFICATIONS_ENABLED, PriceAlert, RuleState, shopValue, targetReached, alertSubject, alertValue, describeRule, formatPrice, newTopic } from '../core/price-alerts';
 import { DialogService } from '../shared/dialog.service';
 import { Icon } from '../shared/icon';
 import { PricesService } from '../shared/prices.service';
@@ -37,7 +37,7 @@ const deviceTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().ti
     </section>
     <p class="note small muted">
       @if (prices.loading()) {Loading prices…} @else if (prices.quotes()) {International spot prices, updated {{ asOf() }}.}
-      Shop and bank prices add a premium (and in India, duty and GST).
+      These are international prices; shops add their own markup. Add a shop price to any item on your list to see what you'd actually pay.
       @if (prices.error()) {<span class="warn-text"> {{ prices.error() }}</span>}
     </p>
 
@@ -48,10 +48,10 @@ const deviceTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().ti
           @for (r of rows(); track r.a.id) {
             <li [class.paused]="!r.a.active">
               @if (notify) {<label class="switch" [attr.aria-label]="(r.a.active ? 'Pause ' : 'Turn on ') + r.text"><input type="checkbox" [checked]="r.a.active" (change)="toggle(r.a)"><span></span></label>}
-              <div class="al-main"><b>{{ notify ? r.text : r.name }}</b><small class="muted">{{ notify ? r.status : r.target }}@if (notify && r.now) { · now {{ r.now }}}</small></div>
+              <div class="al-main"><b>{{ notify ? r.text : r.name }}</b><small class="muted">{{ notify ? r.status : r.target }}@if (!notify && r.a.shopPremium) { · {{ r.a.shopName || 'shop' }} price}@if (notify && r.now) { · now {{ r.now }}}</small></div>
               @if (!notify) {
                 @if (r.hit) {<span class="pill good"><app-icon name="check" />Target reached</span>}
-                <b class="al-price">{{ r.now || '—' }}</b>
+                <span class="al-price"><b>{{ r.now || '—' }}</b>@if (r.spot) {<small class="muted">{{ r.spot }} + {{ r.a.shopPremium }}%</small>}</span>
               }
               @if (notify && r.done) {<button class="btn sm" (click)="rearm(r.a)">Turn on again</button>}
               <button class="btn sm ghost icon-only" (click)="openForm({}, r.a)" [attr.aria-label]="'Edit ' + r.text"><app-icon name="edit" /></button>
@@ -165,11 +165,18 @@ export default class Prices implements OnInit {
         : s?.done ? `Sent ${dateLabel(s.firedAt!.slice(0, 10), true)}${s.firedValue != null ? ' at ' + formatPrice(s.firedValue, a) : ''}, now stopped`
         : `Watching${a.repeat === 'every' ? ', every time' : ', once'}${sent ? ' · ' + sent : ''}`;
       const target = a.kind === 'above' ? `Target: ${formatPrice(a.value ?? 0, a)} or above` : a.kind === 'below' ? `Target: ${formatPrice(a.value ?? 0, a)} or below` : 'No target';
-      return { a, text: describeRule(a), name: alertSubject(a), target, hit: targetReached(a, v), status, now: v == null ? '' : formatPrice(v, a), done: !!s?.done && a.active };
+      // With a shop markup, the big number is what you'd pay; the international price sits beside it.
+      const pay = shopValue(a, v);
+      return {
+        a, text: describeRule(a), name: alertSubject(a), target, hit: targetReached(a, v), status,
+        now: pay == null ? '' : formatPrice(pay, a),
+        spot: a.shopPremium && v != null ? formatPrice(v, a) : '',
+        done: !!s?.done && a.active,
+      };
     });
   });
   /** Targets met at the latest prices, shown at the top after a refresh. */
-  protected readonly reached = computed(() => (this.notify ? [] : this.rows().filter((r) => r.hit).map((r) => `${r.name} is ${r.now}`)));
+  protected readonly reached = computed(() => (this.notify ? [] : this.rows().filter((r) => r.hit).map((r) => `${r.name} is ${r.now}${r.a.shopPremium ? ` at ${r.a.shopName || 'your shop'}` : ''}`)));
   protected readonly lastRun = computed(() => {
     const r = this.state()?.lastRun;
     if (!r) return '';

@@ -618,3 +618,13 @@ button.tile:hover { border-color: var(--accent); }
 .al-price { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .good-banner { display: flex; gap: 8px; align-items: flex-start; padding: 10px 14px; border-radius: 12px; background: var(--good-bg); margin: 0 0 12px; }
 .good-banner .ico { color: var(--good); flex: none; margin-top: 2px; }
+.shop-box { border: 1px dashed var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.shop-box.on { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
+.shop-box p { margin: 0; }
+.al-price { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
+.al-price small { font-size: .74rem; }
+@media (max-width: 640px) {
+  .alert-list li { flex-wrap: wrap; row-gap: 6px; }
+  .al-main { flex: 1 1 100%; }
+  .al-price { align-items: flex-start; flex: 1; }
+}

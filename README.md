@@ -60,7 +60,13 @@ Prices (in the menu) shows gold (24K/22K/18K, per gram, 10 g, ounce or kg), silv
 (for example 1 MYR in INR). Press **Get latest prices** to fetch them. Add the ones you care about to your list,
 optionally with a target (above or below a price); the list shows "Target reached" when the price gets there.
 Prices are international spot prices from [xaus.com](https://xaus.com/api) (gold, silver) and
-[open.er-api.com](https://open.er-api.com) (currencies); shop and bank prices add a premium.
+[open.er-api.com](https://open.er-api.com) (currencies).
+
+Shops charge more than the spot price (their margin, workmanship, and in India duty and GST), and no free feed
+publishes those prices. So each item on your list can carry a **shop price**: type in what a shop or app quotes
+you today, and Ledgerline works out the markup (for example +5.5%) and keeps applying it as the spot price moves,
+showing roughly what you'd pay. Targets then use that shop price. Re-enter a fresh quote now and then, since
+shops change their margin.
 
 ### Price notifications (built, switched off for now)
 

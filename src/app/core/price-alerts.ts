@@ -32,6 +32,14 @@ export interface PriceAlert {
   /** above/below/move: notify once and stop, or every time it happens again. */
   repeat?: 'once' | 'every';
   active: boolean;
+  /**
+   * What your shop charges above the international spot price, in percent (jeweller's margin,
+   * workmanship, and in India duty and GST). Set from a price you were quoted; targets then use
+   * the shop price, because that's what you actually pay.
+   */
+  shopPremium?: number;
+  /** Where that quote came from, e.g. "Meena Gems". */
+  shopName?: string;
   /** Changes whenever the rule is edited, so the job starts it fresh. */
   rev: string;
 }
@@ -231,8 +239,23 @@ export function quotesFrom(metals: unknown, fx: unknown, asOf = new Date().toISO
 export const METALS_URL = 'https://xaus.com/api/v1/spot?compact=1';
 export const FX_URL = 'https://open.er-api.com/v6/latest/USD';
 
-/** Is a target met at the current price? (In-app check, used while notifications are off.) */
-export function targetReached(a: PriceAlert, v: number | null): boolean {
+/** Spot price plus the shop's markup: roughly what you'd pay today. */
+export function shopValue(a: Pick<PriceAlert, 'shopPremium'>, spot: number | null): number | null {
+  return spot == null ? null : a.shopPremium ? spot * (1 + a.shopPremium / 100) : spot;
+}
+
+/** The markup in a quoted price, in percent (quote 494 against spot 468.33 → 5.48). */
+export function premiumFrom(quoted: number, spot: number): number | null {
+  if (!(quoted > 0) || !(spot > 0)) return null;
+  return Math.round(((quoted / spot - 1) * 100 + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * Is a target met at the price you'd actually pay? (In-app check, used while notifications are off.)
+ * Compared against the shop price when a markup is set, otherwise the spot price.
+ */
+export function targetReached(a: PriceAlert, spot: number | null): boolean {
+  const v = shopValue(a, spot);
   if (v == null || !a.active) return false;
   return a.kind === 'above' ? v >= (a.value ?? Infinity) : a.kind === 'below' ? v <= (a.value ?? -Infinity) : false;
 }
