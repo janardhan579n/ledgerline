@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ALERT_DEFAULTS, AlertSettings, PriceAlert, Quotes, TROY_OZ_G, alertSubject, alertValue, describeRule, evaluate, fxRate, localClock, newTopic, quotesFrom } from './price-alerts';
+import { ALERT_DEFAULTS, AlertSettings, PriceAlert, Quotes, TROY_OZ_G, alertSubject, alertValue, describeRule, evaluate, fxRate, localClock, newTopic, quotesFrom, targetReached } from './price-alerts';
 
 // Gold USD 4,000/oz, silver USD 50/oz, 1 USD = 4.2 MYR = 88 INR
 const q = (goldOz = 4000, silverOz = 50, myr = 4.2, inr = 88): Quotes => ({ goldUsdG: goldOz / TROY_OZ_G, silverUsdG: silverOz / TROY_OZ_G, usd: { USD: 1, MYR: myr, INR: inr }, asOf: '' });
@@ -91,5 +91,16 @@ describe('moves and daily updates', () => {
     expect(evaluate(s, r.state, q(), at('2026-11-11T05:07:00Z')).notices).toEqual([]);
     r = evaluate(s, r.state, q(4040), at('2026-11-12T01:07:00Z'));
     expect(r.notices[0].body).toContain('▲1.00% since yesterday');
+  });
+});
+
+describe('in-app target check', () => {
+  it('says whether a target is met at the current price', () => {
+    expect(targetReached(alert({ kind: 'above', value: 540 }), 543)).toBe(true);
+    expect(targetReached(alert({ kind: 'below', value: 540 }), 543)).toBe(false);
+    expect(targetReached(alert({ kind: 'below', value: 545 }), 543)).toBe(true);
+    expect(targetReached(alert({ kind: 'daily' }), 543)).toBe(false);
+    expect(targetReached(alert({ kind: 'above', value: 540, active: false }), 543)).toBe(false);
+    expect(targetReached(alert({ kind: 'above', value: 540 }), null)).toBe(false);
   });
 });

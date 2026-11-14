@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { dateLabel } from '../core/dates';
-import { PriceAlert, RuleState, alertSubject, alertValue, describeRule, formatPrice, newTopic } from '../core/price-alerts';
+import { NOTIFICATIONS_ENABLED, PriceAlert, RuleState, targetReached, alertSubject, alertValue, describeRule, formatPrice, newTopic } from '../core/price-alerts';
 import { DialogService } from '../shared/dialog.service';
 import { Icon } from '../shared/icon';
 import { PricesService } from '../shared/prices.service';
@@ -18,43 +18,52 @@ const deviceTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().ti
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="card-h page-h">
-      <p class="muted">Follow gold, silver and exchange rates, and get a notification every day or when a price reaches the level you set. Prices are checked every hour.</p>
-      <button class="btn primary" (click)="openForm()"><app-icon name="plus" />New alert</button>
+      <p class="muted">{{ notify ? 'Follow gold, silver and exchange rates, and get a notification every day or when a price reaches the level you set. Prices are checked every hour.' : 'Gold, silver and exchange rates, fetched when you ask. Add the prices you care about to your list and set a target to see when it is reached.' }}</p>
+      <button class="btn primary" (click)="refresh()" [disabled]="prices.loading()"><app-icon name="refresh" />{{ prices.loading() ? 'Getting prices…' : 'Get latest prices' }}</button>
     </section>
+
+    @if (reached().length) {
+      <p class="banner good-banner" role="status"><app-icon name="check" /><span><b>Target reached:</b> {{ reached().join(' · ') }}</span></p>
+    }
 
     <section class="tiles four" aria-label="Prices now">
       @for (t of tiles(); track t.label) {
-        <button type="button" class="tile price-tile" (click)="openForm(t.preset)" [attr.aria-label]="'New alert for ' + t.label">
+        <button type="button" class="tile price-tile" (click)="openForm(t.preset)" [attr.aria-label]="'Watch ' + t.label">
           <span class="tile-k">{{ t.label }}</span>
           <span class="tile-v">{{ t.value ?? '—' }}</span>
-          <span class="delta flat"><app-icon name="bell" />Set an alert</span>
+          <span class="delta flat"><app-icon [name]="notify ? 'bell' : 'plus'" />{{ notify ? 'Set an alert' : 'Watch / set a target' }}</span>
         </button>
       }
     </section>
     <p class="note small muted">
       @if (prices.loading()) {Loading prices…} @else if (prices.quotes()) {International spot prices, updated {{ asOf() }}.}
-      Shop and bank prices add a premium (and in India, duty and GST). <button class="link-btn" (click)="prices.load(true)">Refresh</button>
+      Shop and bank prices add a premium (and in India, duty and GST).
       @if (prices.error()) {<span class="warn-text"> {{ prices.error() }}</span>}
     </p>
 
     <section class="card">
-      <div class="card-h"><h3>Your alerts</h3><button class="btn sm" (click)="openForm()"><app-icon name="plus" />New alert</button></div>
+      <div class="card-h"><h3>{{ notify ? 'Your alerts' : 'Your list' }}</h3><button class="btn sm" (click)="openForm()"><app-icon name="plus" />{{ notify ? 'New alert' : 'Add a price' }}</button></div>
       @if (rows().length) {
         <ul class="alert-list">
           @for (r of rows(); track r.a.id) {
             <li [class.paused]="!r.a.active">
-              <label class="switch" [attr.aria-label]="(r.a.active ? 'Pause ' : 'Turn on ') + r.text"><input type="checkbox" [checked]="r.a.active" (change)="toggle(r.a)"><span></span></label>
-              <div class="al-main"><b>{{ r.text }}</b><small class="muted">{{ r.status }}@if (r.now) { · now {{ r.now }}}</small></div>
-              @if (r.done) {<button class="btn sm" (click)="rearm(r.a)">Turn on again</button>}
+              @if (notify) {<label class="switch" [attr.aria-label]="(r.a.active ? 'Pause ' : 'Turn on ') + r.text"><input type="checkbox" [checked]="r.a.active" (change)="toggle(r.a)"><span></span></label>}
+              <div class="al-main"><b>{{ notify ? r.text : r.name }}</b><small class="muted">{{ notify ? r.status : r.target }}@if (notify && r.now) { · now {{ r.now }}}</small></div>
+              @if (!notify) {
+                @if (r.hit) {<span class="pill good"><app-icon name="check" />Target reached</span>}
+                <b class="al-price">{{ r.now || '—' }}</b>
+              }
+              @if (notify && r.done) {<button class="btn sm" (click)="rearm(r.a)">Turn on again</button>}
               <button class="btn sm ghost icon-only" (click)="openForm({}, r.a)" [attr.aria-label]="'Edit ' + r.text"><app-icon name="edit" /></button>
             </li>
           }
         </ul>
       } @else {
-        <p class="empty-sm">No alerts yet. Try "Gold 24K per gram in {{ primary() }}: daily update", or "1 {{ primary() }} in {{ other() }} goes above …".</p>
+        <p class="empty-sm">@if (notify) {No alerts yet. Try "Gold 24K per gram in {{ primary() }}: daily update", or "1 {{ primary() }} in {{ other() }} goes above …".} @else {Nothing on your list yet. Tap a price above, or add one such as "1 {{ primary() }} in {{ other() }}" with a target.}</p>
       }
     </section>
 
+    @if (notify) {
     <section class="card">
       <div class="card-h"><h3>Notifications</h3></div>
       @if (!settings().ntfy.on && !settings().push.on && rows().length) {<p class="banner warning small"><app-icon name="alert" />Turn on at least one way to be notified below, or your alerts can't reach you.</p>}
@@ -104,6 +113,7 @@ const deviceTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().ti
         @if (state()?.lastError) {<br><span class="warn-text">Last problem: {{ state()!.lastError }}</span>}
       </p>
     </section>
+    }
   `,
 })
 export default class Prices implements OnInit {
@@ -113,6 +123,7 @@ export default class Prices implements OnInit {
   private readonly dialog = inject(DialogService);
   private readonly toast = inject(ToastService);
   protected readonly hours = HOURS;
+  protected readonly notify = NOTIFICATIONS_ENABLED;
   protected readonly busy = signal(false);
   protected readonly settings = this.store.alertsView;
   protected readonly state = this.store.alertState;
@@ -153,9 +164,12 @@ export default class Prices implements OnInit {
         : a.kind === 'daily' ? `Every day at ${hour}${sent ? ' · ' + sent : ''}`
         : s?.done ? `Sent ${dateLabel(s.firedAt!.slice(0, 10), true)}${s.firedValue != null ? ' at ' + formatPrice(s.firedValue, a) : ''}, now stopped`
         : `Watching${a.repeat === 'every' ? ', every time' : ', once'}${sent ? ' · ' + sent : ''}`;
-      return { a, text: describeRule(a), status, now: v == null ? '' : formatPrice(v, a), done: !!s?.done && a.active };
+      const target = a.kind === 'above' ? `Target: ${formatPrice(a.value ?? 0, a)} or above` : a.kind === 'below' ? `Target: ${formatPrice(a.value ?? 0, a)} or below` : 'No target';
+      return { a, text: describeRule(a), name: alertSubject(a), target, hit: targetReached(a, v), status, now: v == null ? '' : formatPrice(v, a), done: !!s?.done && a.active };
     });
   });
+  /** Targets met at the latest prices, shown at the top after a refresh. */
+  protected readonly reached = computed(() => (this.notify ? [] : this.rows().filter((r) => r.hit).map((r) => `${r.name} is ${r.now}`)));
   protected readonly lastRun = computed(() => {
     const r = this.state()?.lastRun;
     if (!r) return '';
@@ -170,7 +184,13 @@ export default class Prices implements OnInit {
 
   ngOnInit() {
     void this.prices.load();
-    this.push.check();
+    if (this.notify) this.push.check();
+  }
+  protected async refresh() {
+    await this.prices.load(true);
+    if (!this.prices.quotes()) return;
+    const n = this.reached().length;
+    this.toast.show(this.prices.error() ? 'Showing the last known prices.' : n ? `Prices updated. ${n} target${n === 1 ? '' : 's'} reached.` : 'Prices updated.');
   }
 
   protected openForm(preset: Partial<PriceAlert> = {}, alert: PriceAlert | null = null) {

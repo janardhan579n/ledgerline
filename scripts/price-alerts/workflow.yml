@@ -2,9 +2,20 @@
 # Needs the repository secret FIREBASE_SERVICE_ACCOUNT (see README → Price alerts).
 name: Price alerts
 
+# Not active: GitHub only runs workflows kept in .github/workflows/. This file is parked here so the
+# repository can be pushed with a token that has no "workflow" scope.
+#
+# To turn price notifications on:
+#   1. set NOTIFICATIONS_ENABLED = true in src/app/core/price-alerts.ts
+#   2. copy this file to .github/workflows/price-alerts.yml (easiest from github.com → Add file →
+#      Create new file, which needs no token scope; pushing it from your Mac needs a token with
+#      the "workflow" scope)
+#   3. uncomment the schedule below, and add the FIREBASE_SERVICE_ACCOUNT secret (README)
+#
+# on:
+#   schedule:
+#     - cron: '7 * * * *'   # every hour at :07
 on:
-  schedule:
-    - cron: '7 * * * *' # every hour at :07 (GitHub may start it a few minutes late)
   workflow_dispatch:
     inputs:
       dry_run:

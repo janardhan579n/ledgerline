@@ -54,19 +54,24 @@ Tap **Scan** (or **Scan a receipt or payslip** in the Add form), choose photos o
   4. In **App Check → APIs**, enforce **Firebase AI Logic** (and later Cloud Firestore, once its chart shows almost all requests verified).
   Classic reCAPTCHA v3 keys can no longer be registered with App Check.
 
-## Price alerts
+## Prices
 
-Price alerts (in the menu) follows gold (24K/22K/18K, per gram, 10 g, ounce or kg), silver and any currency pair
-(for example 1 MYR in INR). For each alert choose: a **daily update** at your chosen time, **goes above** or
-**goes below** a price, or **moves by** a percentage; once, or every time it happens.
+Prices (in the menu) shows gold (24K/22K/18K, per gram, 10 g, ounce or kg), silver and any currency pair
+(for example 1 MYR in INR). Press **Get latest prices** to fetch them. Add the ones you care about to your list,
+optionally with a target (above or below a price); the list shows "Target reached" when the price gets there.
 Prices are international spot prices from [xaus.com](https://xaus.com/api) (gold, silver) and
 [open.er-api.com](https://open.er-api.com) (currencies); shop and bank prices add a premium.
 
-Notifications come from a scheduled job that runs every hour on GitHub Actions
-(`.github/workflows/price-alerts.yml` → `scripts/price-alerts/run.ts`, using the same rules code as the app).
-Hourly runs use about 720 of the 2,000 free GitHub Actions minutes a month for a private repo.
+### Price notifications (built, switched off for now)
 
-### One-time setup
+The code for notifications is in place but disabled: daily updates and above/below/percentage alerts sent by ntfy
+or browser push, from an hourly GitHub Actions job (`scripts/price-alerts/run.ts`).
+To turn it on: set `NOTIFICATIONS_ENABLED = true` in `src/app/core/price-alerts.ts`, copy
+`scripts/price-alerts/workflow.yml` to `.github/workflows/price-alerts.yml` and uncomment its schedule
+(see the comment at the top of that file), then do the setup below. Hourly runs use about 720 of the 2,000 free GitHub Actions
+minutes a month for a private repo.
+
+#### Setup when turning notifications on
 
 1. **Let the job read alerts.** Firebase console → Project settings → Service accounts → *Generate new private key*.
    Open the downloaded file, copy all of it, then on GitHub: repo → Settings → Secrets and variables → Actions →

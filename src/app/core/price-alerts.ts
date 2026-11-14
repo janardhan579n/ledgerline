@@ -6,6 +6,12 @@
 
 export const TROY_OZ_G = 31.1034768;
 
+/**
+ * Notifications (ntfy, browser push, hourly GitHub job) are built but switched off for now:
+ * prices are fetched in the app when asked. Set to true and follow README → Price notifications to enable.
+ */
+export const NOTIFICATIONS_ENABLED = false;
+
 export type Asset = 'gold' | 'silver' | 'fx';
 export type MetalUnit = 'g' | '10g' | 'oz' | 'kg';
 export type RuleKind = 'daily' | 'above' | 'below' | 'move';
@@ -224,3 +230,9 @@ export function quotesFrom(metals: unknown, fx: unknown, asOf = new Date().toISO
 
 export const METALS_URL = 'https://xaus.com/api/v1/spot?compact=1';
 export const FX_URL = 'https://open.er-api.com/v6/latest/USD';
+
+/** Is a target met at the current price? (In-app check, used while notifications are off.) */
+export function targetReached(a: PriceAlert, v: number | null): boolean {
+  if (v == null || !a.active) return false;
+  return a.kind === 'above' ? v >= (a.value ?? Infinity) : a.kind === 'below' ? v <= (a.value ?? -Infinity) : false;
+}

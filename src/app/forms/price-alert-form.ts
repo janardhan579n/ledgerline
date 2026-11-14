@@ -2,21 +2,23 @@ import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, si
 import { FormsModule } from '@angular/forms';
 import { CURRENCIES, toNumber } from '../core/currency';
 import { uid } from '../core/defaults';
-import { Asset, MetalUnit, PURITIES, PriceAlert, RuleKind, UNIT_LABEL, alertSubject, alertValue, formatPrice } from '../core/price-alerts';
+import { Asset, MetalUnit, NOTIFICATIONS_ENABLED, PURITIES, PriceAlert, RuleKind, UNIT_LABEL, alertSubject, alertValue, formatPrice } from '../core/price-alerts';
 import { confirmAction } from '../shared/confirm-dialog';
 import { DialogService } from '../shared/dialog.service';
 import { Modal } from '../shared/modal';
 import { PricesService } from '../shared/prices.service';
 import { LedgerStore } from '../state/ledger.store';
 
-const KINDS: ReadonlyArray<[RuleKind, string]> = [['daily', 'Daily update'], ['above', 'Goes above'], ['below', 'Goes below'], ['move', 'Moves by %']];
+const KINDS: ReadonlyArray<[RuleKind, string]> = NOTIFICATIONS_ENABLED
+  ? [['daily', 'Daily update'], ['above', 'Goes above'], ['below', 'Goes below'], ['move', 'Moves by %']]
+  : [['daily', 'Just show the price'], ['above', 'Target: above'], ['below', 'Target: below']];
 
 @Component({
   selector: 'app-price-alert-form',
   imports: [Modal, FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <app-modal [heading]="isNew() ? 'New price alert' : 'Edit price alert'">
+    <app-modal [heading]="notify ? (isNew() ? 'New price alert' : 'Edit price alert') : (isNew() ? 'Add a price to watch' : 'Edit watched price')">
       <form (submit)="$event.preventDefault(); save()">
         <div class="modal-body">
           <div class="field"><span class="lbl">Watch</span>
@@ -42,14 +44,15 @@ const KINDS: ReadonlyArray<[RuleKind, string]> = [['daily', 'Daily update'], ['a
           }
           <p class="small muted">{{ subject() }} is <b>{{ now() ?? 'loading…' }}</b> right now.</p>
 
-          <div class="field"><span class="lbl">Notify me</span>
+          <div class="field"><span class="lbl">{{ notify ? 'Notify me' : 'Target (optional)' }}</span>
             <div class="seg small" role="radiogroup" aria-label="When to notify">
               @for (k of kinds; track k[0]) {<button type="button" role="radio" [attr.aria-checked]="kind() === k[0]" (click)="setKind(k[0])">{{ k[1] }}</button>}
             </div>
           </div>
           @switch (kind()) {
             @case ('daily') {
-              <p class="small muted">Sent once a day at {{ hourLabel() }} with the price and its change since the day before. Change the time under Notifications.</p>
+              @if (notify) {<p class="small muted">Sent once a day at {{ hourLabel() }} with the price and its change since the day before. Change the time under Notifications.</p>}
+              @else {<p class="small muted">Shown on your list whenever you get the latest prices.</p>}
             }
             @case ('move') {
               <div class="field"><label for="pa-val">When it moves by</label><div class="input-unit short"><input id="pa-val" name="val" type="number" min="0.1" max="50" step="0.1" inputmode="decimal" [ngModel]="value()" (ngModelChange)="value.set($event)"><span>% up or down</span></div>
@@ -59,10 +62,10 @@ const KINDS: ReadonlyArray<[RuleKind, string]> = [['daily', 'Daily update'], ['a
               <div class="field"><label for="pa-val">{{ kind() === 'above' ? 'When it rises to or above' : 'When it falls to or below' }}</label>
                 <div class="pa-target"><input id="pa-val" name="val" type="number" min="0" step="any" inputmode="decimal" [ngModel]="value()" (ngModelChange)="value.set($event)" class="short-input">
                   @if (nowValue() != null) {<button type="button" class="btn sm ghost" (click)="useNow()">Use current</button>}</div>
-                <small>In {{ currency() }}{{ asset() === 'fx' ? '' : ', ' + unitLabel() }}.</small></div>
+                <small>In {{ currency() }}{{ asset() === 'fx' ? '' : ', ' + unitLabel() }}.@if (!notify) { Your list shows "Target reached" when the price gets there.}</small></div>
             }
           }
-          @if (kind() !== 'daily') {
+          @if (notify && kind() !== 'daily') {
             <div class="field"><span class="lbl">How often</span>
               <div class="seg small" role="radiogroup" aria-label="Repeat">
                 <button type="button" role="radio" [attr.aria-checked]="repeat() === 'once'" (click)="repeat.set('once')">Once, then stop</button>
@@ -91,6 +94,7 @@ export class PriceAlertForm implements OnInit {
   readonly preset = input<Partial<PriceAlert>>({});
   protected readonly isNew = computed(() => !this.alert());
   protected readonly kinds = KINDS;
+  protected readonly notify = NOTIFICATIONS_ENABLED;
   protected readonly purities = PURITIES;
   protected readonly units = Object.entries(UNIT_LABEL) as [MetalUnit, string][];
   protected readonly error = signal('');
@@ -116,10 +120,11 @@ export class PriceAlertForm implements OnInit {
     void this.prices.load();
     const s = this.store.settingsView();
     const other = s.currencies.find((c) => c !== s.primary) ?? 'INR';
-    const a = this.alert() ?? (Object.keys(this.preset()).length ? ({ kind: 'above', ...this.preset() } as PriceAlert) : null);
+    const a = this.alert() ?? (Object.keys(this.preset()).length ? ({ kind: NOTIFICATIONS_ENABLED ? 'above' : 'daily', ...this.preset() } as PriceAlert) : null);
     if (!a) {
       this.currency.set(s.primary);
       this.base.set(s.primary);
+      if (!NOTIFICATIONS_ENABLED) this.kind.set('daily');
       return;
     }
     this.asset.set(a.asset);
@@ -127,7 +132,7 @@ export class PriceAlertForm implements OnInit {
     this.base.set(a.base ?? s.primary);
     this.unit.set(a.unit ?? 'g');
     this.purity.set(a.purity ?? 0.999);
-    this.kind.set(a.kind);
+    this.kind.set(KINDS.some((k) => k[0] === a.kind) ? a.kind : 'daily');
     this.value.set(a.value ?? '');
     this.repeat.set(a.repeat ?? 'once');
   }
@@ -173,6 +178,6 @@ export class PriceAlertForm implements OnInit {
 
   protected async remove() {
     const a = this.alert()!;
-    if (await confirmAction(this.dialog, 'Delete this price alert?', 'Delete')) void this.store.saveAlerts((s) => (s.alerts = s.alerts.filter((x) => x.id !== a.id)));
+    if (await confirmAction(this.dialog, this.notify ? 'Delete this price alert?' : 'Remove this price from your list?', 'Delete')) void this.store.saveAlerts((s) => (s.alerts = s.alerts.filter((x) => x.id !== a.id)));
   }
 }
